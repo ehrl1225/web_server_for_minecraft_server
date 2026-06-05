@@ -1,0 +1,7 @@
+.idea
+.venv
+build
+servers
+src/log
+**/__pycache__
+src/server_file_path.txt

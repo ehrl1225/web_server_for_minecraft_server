@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>서버 관리</title>
+</head>
+<body>
+    <h1>마인크래프트 서버</h1>
+    <h2 id="is_started">서버 시작 여부</h2>
+    <h2 id="is_on">서버 열림 여부</h2>
+    <button id="start_btn">서버 시작</button>
+    <button id="stop_btn">서버 종료</button>
+    <br>
+    <br>
+    <br>
+    <input type="checkbox" name="log" id="auto_refresh"/>
+    <button id="auto_refresh_btn">로그 불러오기(토글)</button>
+    <button id="scroll_up_btn">로그 올리기</button>
+    <button id="scroll_down_btn">로그 밑으로 내리기</button>
+    <br>
+    <textarea id="log" rows="20", cols="60">로그:</textarea>
+
+</body>
+<script>
+    const is_started = document.getElementById('is_started');
+    const is_on = document.getElementById('is_on');
+    const start_btn = document.getElementById('start_btn');
+    const end_btn = document.getElementById('stop_btn');
+    const log_refresh_btn = document.getElementById('auto_refresh_btn');
+    const log_textarea = document.getElementById('log');
+    const auto_refresh_chb = document.getElementById('auto_refresh');
+    const scroll_up_btn = document.getElementById('scroll_up_btn');
+    const scroll_down_btn = document.getElementById('scroll_down_btn');
+    let logs = ["로그:"];
+
+    async function update_is_started() {
+        const response = await fetch('/server/is-started', {method:'GET'});
+        const result = await response.json();
+        if (result.is_started === true){
+            is_started.textContent = "서버 시작 여부 : 켜짐";
+        }else{
+            is_started.textContent = "서버 시작 여부 : 꺼짐";
+        }
+        const response2 = await fetch('/server/is-on', {method:'GET'});
+        const result2 = await response2.json();
+        if (result2.is_on === true) {
+            is_on.textContent = "서버 열림 여부 : 열려있음";
+        }else{
+            is_on.textContent = "서버 열림 여부 : 닫혀있음";
+        }
+        return result.is_started;
+    }
+
+    async function update_log(){
+        if (!auto_refresh_chb.checked){
+            return;
+        }
+        const response = await fetch("/server/get-console-output",
+           {
+               method:'POST',
+               headers: {
+                   'Accept': 'application/json',
+                   'Content-Type': 'application/json'
+               },
+               body: JSON.stringify({
+                   startline:logs.length+1
+               }),
+           }
+       );
+       const result = await response.json();
+       result.console_output.forEach((item, idx)=>{
+           logs.push(item);
+       });
+       log_textarea.innerHTML = logs.join('\n');
+    }
+    let timerId = setInterval(() => {
+        update_log();
+        let is_started = update_is_started();
+        if (!is_started){
+            auto_refresh_chb.checked = false;
+        }
+
+    },1000);
+
+    start_btn.addEventListener('click', async () => {
+        fetch("/server/start-server", {method:'post'});
+        update_is_started();
+        logs.splice(1, logs.length);
+        auto_refresh_chb.checked=true;
+    });
+    end_btn.addEventListener('click', async () => {
+        fetch("/server/stop-server", {method:'post'});
+        update_is_started();
+        auto_refresh_chb.checked=false;
+    });
+    log_refresh_btn.addEventListener('click', async () => {
+       auto_refresh_chb.checked=!auto_refresh_chb.checked
+    });
+    scroll_up_btn.addEventListener('click', async () => {
+        log_textarea.scrollTop = 0;
+    });
+    scroll_down_btn.addEventListener('click', async () => {
+        log_textarea.scrollTop = log_textarea.scrollHeight;
+    });
+
+    update_is_started();
+
+</script>
+</html>
