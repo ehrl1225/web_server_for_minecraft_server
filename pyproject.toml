@@ -1,0 +1,11 @@
+[project]
+name = "web-server-for-minecraft-server"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.136.3",
+    "pyqt6>=6.11.0",
+    "uvicorn>=0.49.0",
+]

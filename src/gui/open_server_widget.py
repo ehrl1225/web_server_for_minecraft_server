@@ -1,3 +1,4 @@
+from PyQt6.QtGui import QCloseEvent
 from PyQt6.QtWidgets import QWidget, QLineEdit, QPushButton, QHBoxLayout, QVBoxLayout, QFileDialog, QMessageBox, QLabel, \
     QSpinBox
 from src.router import server_data
@@ -6,6 +7,8 @@ import os
 
 
 class OpenServerWidget(QWidget):
+
+    server_started: bool = False
 
     def __init__(self):
         super().__init__()
@@ -85,6 +88,7 @@ class OpenServerWidget(QWidget):
         self.url_btn.setEnabled(False)
         self.start_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
+        self.server_started = True
 
     def stopServer(self) -> None:
         self.server_worker.stop()
@@ -94,7 +98,23 @@ class OpenServerWidget(QWidget):
         self.url_btn.setEnabled(True)
         self.start_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
+        self.server_started = False
 
     def sendCommand(self) -> None:
         server_data.sendCommand(self.command_le.text())
         self.command_le.clear()
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        if self.server_started == False:
+            event.accept()
+            return
+        response=QMessageBox.warning(
+            self,
+            "경고",
+            "서버가 켜져있습니다.\n종료하시겠습니까?",
+            buttons=QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel
+        )
+        if response == QMessageBox.StandardButton.Ok:
+            event.accept()
+        else:
+            event.ignore()

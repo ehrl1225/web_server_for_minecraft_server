@@ -1,23 +1,14 @@
-from fastapi import FastAPI, APIRouter, Request
-from fastapi.templating import Jinja2Templates
+from fastapi import APIRouter
 import subprocess
+
 from src.models import Command, ReadLine
-import os
-from starlette.responses import HTMLResponse
 from src.util import ServerData
 
 server_process: None | subprocess.Popen = None
 
 router = APIRouter()
-api = FastAPI()
-
-templates = Jinja2Templates(directory="src/templates")
 
 server_data = ServerData()
-
-@router.get("/server", response_class=HTMLResponse)
-async def server(request: Request):
-    return templates.TemplateResponse("server.html", {"request": request})
 
 @router.get("/server/is-started")
 async def is_started():

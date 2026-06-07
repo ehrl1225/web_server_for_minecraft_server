@@ -1,6 +1,7 @@
 from PyQt6.QtCore import QObject, pyqtSignal
 from src.router import server_data
 import subprocess
+import atexit
 
 class ApiServerWorker(QObject):
     server_started = pyqtSignal()
@@ -14,12 +15,17 @@ class ApiServerWorker(QObject):
         try:
             self.process = subprocess.Popen(
                 [
+                    "uv",
+                    "run",
                     "uvicorn",
                     "src.main:app",
                     "--host=0.0.0.0",
                     f"--port={str(server_data.port)}"
                  ]
             )
+            def cleanup():
+                self.process.terminate()
+            atexit.register(cleanup)
         except Exception as e:
             print(e)
         self.server_started.emit()

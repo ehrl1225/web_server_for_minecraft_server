@@ -1,5 +1,7 @@
 from PyQt6.QtWidgets import QApplication
 from fastapi import FastAPI
+from starlette.staticfiles import StaticFiles
+
 from src.router import server_manager
 from src.gui import OpenServerWidget
 import sys
@@ -7,6 +9,7 @@ import sys
 NO_GUI = False
 
 app = FastAPI()
+app.mount("/", StaticFiles(directory="src/templates", html=True), name="templates")
 
 app.include_router(server_manager.router)
 
