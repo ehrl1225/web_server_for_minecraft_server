@@ -1,3 +1,2 @@
 @echo off
-pip install .
-call minecraft_api_server
+uv run src/main.py

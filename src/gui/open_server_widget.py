@@ -114,6 +114,7 @@ class OpenServerWidget(QWidget):
             "서버가 켜져있습니다.\n종료하시겠습니까?",
             buttons=QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel
         )
+        self.server_worker.stop()
         if response == QMessageBox.StandardButton.Ok:
             event.accept()
         else:
