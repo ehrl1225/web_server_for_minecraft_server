@@ -89,7 +89,7 @@
         auto_refresh_chb.checked=true;
     });
     end_btn.addEventListener('click', async () => {
-        fetch("/server/stop-server", {method:'post'});
+        fetch("/stop-server", {method:'post'});
         update_is_started();
         auto_refresh_chb.checked=false;
     });

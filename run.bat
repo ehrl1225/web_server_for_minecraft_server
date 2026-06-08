@@ -1,2 +1,2 @@
 @echo off
-uv run src/main.py
+uv run main.py
