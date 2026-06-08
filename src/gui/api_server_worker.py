@@ -31,6 +31,12 @@ class ApiServerWorker(QObject):
 
     def stop(self):
         if self.process is not None:
-            self.process.send_signal(signal.CTRL_BREAK_EVENT)
-            self.process = None
-            self.server_stopped.emit()
+            try:
+                subprocess.run(["taskkill", "/F", "/T", "/PID", str(self.process.pid)],
+                               stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL,
+                                check=True)
+                self.process = None
+                self.server_stopped.emit()
+            except Exception as e:
+                print(e)

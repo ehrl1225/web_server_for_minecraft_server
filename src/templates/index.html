@@ -34,14 +34,14 @@
     let logs = ["로그:"];
 
     async function update_is_started() {
-        const response = await fetch('/server/is-started', {method:'GET'});
+        const response = await fetch('/is-started', {method:'GET'});
         const result = await response.json();
         if (result.is_started === true){
             is_started.textContent = "서버 시작 여부 : 켜짐";
         }else{
             is_started.textContent = "서버 시작 여부 : 꺼짐";
         }
-        const response2 = await fetch('/server/is-on', {method:'GET'});
+        const response2 = await fetch('/is-on', {method:'GET'});
         const result2 = await response2.json();
         if (result2.is_on === true) {
             is_on.textContent = "서버 열림 여부 : 열려있음";
@@ -55,7 +55,7 @@
         if (!auto_refresh_chb.checked){
             return;
         }
-        const response = await fetch("/server/get-console-output",
+        const response = await fetch("/get-console-output",
            {
                method:'POST',
                headers: {
@@ -83,7 +83,7 @@
     },1000);
 
     start_btn.addEventListener('click', async () => {
-        fetch("/server/start-server", {method:'post'});
+        fetch("/start-server", {method:'post'});
         update_is_started();
         logs.splice(1, logs.length);
         auto_refresh_chb.checked=true;
