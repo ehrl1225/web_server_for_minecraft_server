@@ -1,109 +1,238 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <title>서버 관리</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>마인크래프트 서버 제어 패널</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @keyframes pulse-slow { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .8; transform: scale(0.98); } }
+        .animate-pulse-slow { animation: pulse-slow 2s infinite ease-in-out; }
+    </style>
 </head>
-<body>
-    <h1>마인크래프트 서버</h1>
-    <h2 id="is_started">서버 시작 여부</h2>
-    <h2 id="is_on">서버 열림 여부</h2>
-    <button id="start_btn">서버 시작</button>
-    <button id="stop_btn">서버 종료</button>
-    <br>
-    <br>
-    <br>
-    <input type="checkbox" name="log" id="auto_refresh"/>
-    <button id="auto_refresh_btn">로그 불러오기(토글)</button>
-    <button id="scroll_up_btn">로그 올리기</button>
-    <button id="scroll_down_btn">로그 밑으로 내리기</button>
-    <br>
-    <textarea id="log" rows="20", cols="60">로그:</textarea>
+<body class="bg-gray-950 text-gray-100 font-sans antialiased min-h-screen flex items-center justify-center p-4">
 
+    <!-- 중앙 카드 컨테이너 -->
+    <div class="max-w-md w-full bg-gray-900 border border-gray-800 rounded-3xl p-8 shadow-2xl flex flex-col items-center text-center">
+
+        <!-- 게임 아이콘 & 타이틀 -->
+        <div class="w-20 h-20 bg-green-500/10 border border-green-500/20 rounded-2xl flex items-center justify-center text-4xl mb-5 shadow-inner">
+            ⛏️
+        </div>
+        <h1 class="text-2xl font-bold tracking-tight text-white mb-1">마인크래프트 서버</h1>
+        <p class="text-sm text-gray-400 mb-8">서버를 켜거나 빈 서버를 종료할 수 있습니다.</p>
+
+        <!-- 현재 서버 상태 뱃지 -->
+        <div class="w-full bg-gray-800/80 border border-gray-700/60 rounded-2xl p-4 mb-6 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <span id="status-dot" class="h-3.5 w-3.5 rounded-full bg-red-500"></span>
+                <div class="text-left">
+                    <p class="text-xs text-gray-400 font-medium">서버 상태</p>
+                    <p id="status-text" class="text-base font-bold text-white">오프라인</p>
+                </div>
+            </div>
+            <div class="text-right">
+                <p class="text-xs text-gray-400 font-medium">현재 접속자</p>
+                <p id="player-count" class="text-base font-bold text-green-400">0 명</p>
+            </div>
+        </div>
+
+        <!-- 안내 메시지 박스 -->
+        <div id="notice-box" class="w-full bg-blue-950/40 border border-blue-800/40 text-blue-300 text-xs rounded-xl p-3 mb-6 leading-relaxed">
+            💡 서버를 켜면 모드 및 맵 로딩에 약 1~3분이 소요됩니다.
+        </div>
+
+        <!-- 액션 버튼 영역 -->
+        <div class="w-full space-y-3">
+            <!-- 서버 켜기 버튼 (오프라인일 때 표시) -->
+            <button id="start-btn" onclick="startServer()"
+                    class="w-full py-4 px-6 rounded-2xl font-bold text-base transition-all duration-300 shadow-lg flex items-center justify-center space-x-2 bg-green-600 hover:bg-green-500 text-white cursor-pointer hover:shadow-green-500/20 active:scale-[0.98]">
+                <span id="start-icon">🚀</span>
+                <span id="start-text">마인크래프트 서버 켜기</span>
+            </button>
+
+            <!-- 서버 끄기 버튼 (온라인일 때 활성화, 단 플레이어가 0명일 때만 가능) -->
+            <button id="stop-btn" onclick="stopServer()"
+                    class="hidden w-full py-3.5 px-6 rounded-2xl font-bold text-sm transition-all duration-300 shadow-md flex items-center justify-center space-x-2 bg-red-600/80 hover:bg-red-500 text-white cursor-pointer hover:shadow-red-500/20 active:scale-[0.98]">
+                <span>🛑</span>
+                <span id="stop-text">서버 안전 종료 (접속자 0명)</span>
+            </button>
+        </div>
+
+        <!-- 연결 상태 표시 -->
+        <div class="mt-6 flex items-center space-x-2 text-xs text-gray-500">
+            <span id="ws-dot" class="h-2 w-2 rounded-full bg-gray-600"></span>
+            <span id="ws-text">웹서버 연결 확인 중...</span>
+        </div>
+    </div>
+
+    <script>
+        const statusDot = document.getElementById("status-dot");
+        const statusText = document.getElementById("status-text");
+        const playerCount = document.getElementById("player-count");
+        const startBtn = document.getElementById("start-btn");
+        const startIcon = document.getElementById("start-icon");
+        const startText = document.getElementById("start-text");
+        const stopBtn = document.getElementById("stop-btn");
+        const stopText = document.getElementById("stop-text");
+        const wsDot = document.getElementById("ws-dot");
+        const wsText = document.getElementById("ws-text");
+        const noticeBox = document.getElementById("notice-box");
+
+        let currentStatus = { is_starting: false, is_online: false, is_stopping: false, player_count: 0, max_players: 20 };
+        let socket = null;
+        let reconnectTimer = null;
+
+        function connectWebSocket() {
+            const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+            const wsUrl = `${wsProtocol}//${window.location.host}/ws/stream`;
+
+            socket = new WebSocket(wsUrl);
+
+            socket.onopen = function() {
+                wsDot.className = "h-2 w-2 rounded-full bg-green-500";
+                wsText.innerText = "웹서버 연결됨";
+                if (reconnectTimer) {
+                    clearInterval(reconnectTimer);
+                    reconnectTimer = null;
+                }
+            };
+
+            socket.onmessage = function(event) {
+                try {
+                    const message = JSON.parse(event.data);
+                    if (message.type === "status") {
+                        currentStatus = message.data;
+                        updateUI(currentStatus);
+                    } else if (message.type === "error") {
+                        alert(message.data);
+                    }
+                } catch(e) {
+                    console.error("Message parse error:", e);
+                }
+            };
+
+            socket.onclose = function() {
+                wsDot.className = "h-2 w-2 rounded-full bg-red-500";
+                wsText.innerText = "연결 끊김 (재연결 시도 중...)";
+                if (!reconnectTimer) {
+                    reconnectTimer = setInterval(connectWebSocket, 3000);
+                }
+            };
+
+            socket.onerror = function() {
+                socket.close();
+            };
+        }
+
+        function updateUI(status) {
+            const count = status.player_count || 0;
+            const max = status.max_players || 20;
+            playerCount.innerText = `${count} / ${max} 명`;
+
+            if (status.is_stopping) {
+                // 1. 안전하게 월드 저장 및 종료 중
+                statusDot.className = "h-3.5 w-3.5 rounded-full bg-orange-400 animate-pulse";
+                statusText.innerText = "월드 저장 및 종료 중...";
+                statusText.className = "text-base font-bold text-orange-400";
+
+                startBtn.classList.remove("hidden");
+                startBtn.disabled = true;
+                startBtn.className = "w-full py-4 px-6 rounded-2xl font-bold text-base transition-all duration-300 shadow-lg flex items-center justify-center space-x-2 bg-orange-600/50 text-white cursor-not-allowed";
+                startIcon.innerText = "💾";
+                startText.innerText = "맵 데이터를 안전하게 저장하고 있습니다...";
+
+                stopBtn.classList.add("hidden");
+                noticeBox.innerText = "💾 서버가 월드를 저장한 뒤 완전히 꺼질 때까지 잠시만 기다려주세요.";
+
+            } else if (status.is_starting) {
+                // 2. 켜지는 중
+                statusDot.className = "h-3.5 w-3.5 rounded-full bg-yellow-400 animate-pulse";
+                statusText.innerText = "서버 켜지는 중...";
+                statusText.className = "text-base font-bold text-yellow-400";
+
+                startBtn.classList.remove("hidden");
+                startBtn.disabled = true;
+                startBtn.className = "w-full py-4 px-6 rounded-2xl font-bold text-base transition-all duration-300 shadow-lg flex items-center justify-center space-x-2 bg-yellow-600/50 text-white cursor-not-allowed";
+                startIcon.innerText = "⏳";
+                startText.innerText = "부팅 중입니다. 잠시만 기다려주세요...";
+
+                stopBtn.classList.add("hidden");
+                noticeBox.innerText = "☕ 마인크래프트 서버가 시작되고 있습니다. 부팅 완료 후 접속해주세요.";
+
+            } else if (status.is_online) {
+                // 3. 온라인 상태
+                statusDot.className = "h-3.5 w-3.5 rounded-full bg-green-500";
+                statusText.innerText = "온라인 (구동 중)";
+                statusText.className = "text-base font-bold text-green-400";
+
+                startBtn.classList.remove("hidden");
+                startBtn.disabled = true;
+                startBtn.className = "w-full py-4 px-6 rounded-2xl font-bold text-base transition-all duration-300 shadow-lg flex items-center justify-center space-x-2 bg-gray-800 text-gray-300 border border-gray-700 cursor-default";
+                startIcon.innerText = "🎮";
+                startText.innerText = "서버가 구동 중입니다";
+
+                stopBtn.classList.remove("hidden");
+                if (count > 0) {
+                    stopBtn.disabled = true;
+                    stopBtn.className = "w-full py-3.5 px-6 rounded-2xl font-bold text-sm transition-all duration-300 flex items-center justify-center space-x-2 bg-gray-800/80 text-gray-500 border border-gray-700/50 cursor-not-allowed";
+                    stopText.innerText = `서버 끄기 불가 (${count}명 플레이 중)`;
+                    noticeBox.innerText = `🎮 현재 ${count}명이 게임을 플레이하고 있습니다.`;
+                } else {
+                    stopBtn.disabled = false;
+                    stopBtn.className = "w-full py-3.5 px-6 rounded-2xl font-bold text-sm transition-all duration-300 shadow-md flex items-center justify-center space-x-2 bg-red-600/80 hover:bg-red-500 text-white cursor-pointer hover:shadow-red-500/20 active:scale-[0.98]";
+                    stopText.innerText = "서버 안전 종료 (접속자 0명)";
+                    noticeBox.innerText = "💡 접속자가 0명입니다. 게임을 마쳤다면 위 버튼을 눌러 서버를 끌 수 있습니다.";
+                }
+
+            } else {
+                // 4. 오프라인 (서버 꺼짐)
+                statusDot.className = "h-3.5 w-3.5 rounded-full bg-red-500";
+                statusText.innerText = "오프라인 (꺼짐)";
+                statusText.className = "text-base font-bold text-red-400";
+
+                startBtn.classList.remove("hidden");
+                startBtn.disabled = false;
+                startBtn.className = "w-full py-4 px-6 rounded-2xl font-bold text-base transition-all duration-300 shadow-lg flex items-center justify-center space-x-2 bg-green-600 hover:bg-green-500 text-white cursor-pointer hover:shadow-green-500/20 active:scale-[0.98]";
+                startIcon.innerText = "🚀";
+                startText.innerText = "마인크래프트 서버 켜기";
+
+                stopBtn.classList.add("hidden");
+                noticeBox.innerText = "💡 서버가 꺼져 있습니다. 위 버튼을 누르면 서버가 켜집니다.";
+            }
+        }
+
+        function startServer() {
+            if (!socket || socket.readyState !== WebSocket.OPEN) {
+                alert("웹서버와 연결되어 있지 않습니다.");
+                return;
+            }
+            if (!currentStatus.is_starting && !currentStatus.is_online && !currentStatus.is_stopping) {
+                socket.send(JSON.stringify({ "action": "start" }));
+                startIcon.innerText = "⏳";
+                startText.innerText = "서버 시작 요청 중...";
+                startBtn.disabled = true;
+            }
+        }
+
+        function stopServer() {
+            if (!socket || socket.readyState !== WebSocket.OPEN) {
+                alert("웹서버와 연결되어 있지 않습니다.");
+                return;
+            }
+            if (currentStatus.player_count > 0) {
+                alert("현재 다른 플레이어가 게임 중이어서 서버를 끌 수 없습니다.");
+                return;
+            }
+            if (confirm("정말로 마인크래프트 서버를 안전하게 종료하시겠습니까? (월드 자동 저장)")) {
+                socket.send(JSON.stringify({ "action": "stop" }));
+                stopBtn.disabled = true;
+                stopText.innerText = "서버 종료 요청 중...";
+            }
+        }
+
+        window.addEventListener("DOMContentLoaded", connectWebSocket);
+    </script>
 </body>
-<script>
-    const is_started = document.getElementById('is_started');
-    const is_on = document.getElementById('is_on');
-    const start_btn = document.getElementById('start_btn');
-    const end_btn = document.getElementById('stop_btn');
-    const log_refresh_btn = document.getElementById('auto_refresh_btn');
-    const log_textarea = document.getElementById('log');
-    const auto_refresh_chb = document.getElementById('auto_refresh');
-    const scroll_up_btn = document.getElementById('scroll_up_btn');
-    const scroll_down_btn = document.getElementById('scroll_down_btn');
-    let logs = ["로그:"];
-
-    async function update_is_started() {
-        const response = await fetch('/is-started', {method:'GET'});
-        const result = await response.json();
-        if (result.is_started === true){
-            is_started.textContent = "서버 시작 여부 : 켜짐";
-        }else{
-            is_started.textContent = "서버 시작 여부 : 꺼짐";
-        }
-        const response2 = await fetch('/is-on', {method:'GET'});
-        const result2 = await response2.json();
-        if (result2.is_on === true) {
-            is_on.textContent = "서버 열림 여부 : 열려있음";
-        }else{
-            is_on.textContent = "서버 열림 여부 : 닫혀있음";
-        }
-        return result.is_started;
-    }
-
-    async function update_log(){
-        if (!auto_refresh_chb.checked){
-            return;
-        }
-        const response = await fetch("/get-console-output",
-           {
-               method:'POST',
-               headers: {
-                   'Accept': 'application/json',
-                   'Content-Type': 'application/json'
-               },
-               body: JSON.stringify({
-                   startline:logs.length+1
-               }),
-           }
-       );
-       const result = await response.json();
-       result.console_output.forEach((item, idx)=>{
-           logs.push(item);
-       });
-       log_textarea.innerHTML = logs.join('\n');
-    }
-    let timerId = setInterval(() => {
-        update_log();
-        let is_started = update_is_started();
-        if (!is_started){
-            auto_refresh_chb.checked = false;
-        }
-
-    },1000);
-
-    start_btn.addEventListener('click', async () => {
-        fetch("/start-server", {method:'post'});
-        update_is_started();
-        logs.splice(1, logs.length);
-        auto_refresh_chb.checked=true;
-    });
-    end_btn.addEventListener('click', async () => {
-        fetch("/stop-server", {method:'post'});
-        update_is_started();
-        auto_refresh_chb.checked=false;
-    });
-    log_refresh_btn.addEventListener('click', async () => {
-       auto_refresh_chb.checked=!auto_refresh_chb.checked
-    });
-    scroll_up_btn.addEventListener('click', async () => {
-        log_textarea.scrollTop = 0;
-    });
-    scroll_down_btn.addEventListener('click', async () => {
-        log_textarea.scrollTop = log_textarea.scrollHeight;
-    });
-
-    update_is_started();
-
-</script>
 </html>
