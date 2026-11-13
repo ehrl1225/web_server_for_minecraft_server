@@ -3,12 +3,19 @@ from fastapi import FastAPI
 from starlette.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 import asyncio
+import logging
 
 from src.router import server_manager, websocket_router
 from src.gui import OpenServerWidget
+from src.util.log_filter import EndpointFilter
 import sys
 
 from src.util import monitor_minecraft_server
+
+# 2초마다 발생하는 /is-started, /is-on 등의 단순 폴링 로그를 uvicorn 콘솔에서 숨김
+logging.getLogger("uvicorn.access").addFilter(
+    EndpointFilter(excluded_paths=["/is-started", "/is-on", "/ping"])
+)
 
 NO_GUI = False
 
@@ -40,14 +47,10 @@ async def ping():
 
 @app.get("/")
 async def root():
-    return {"message":"마인크래프트 웹 패널 API 서버가 정상 구동 중입니다."}
+    return {"message": "마인크래프트 웹 패널 API 서버가 정상 구동 중입니다."}
 
 def main():
     if NO_GUI:
-        # import uvicorn
-        # from src.router import server_data
-        # server_data.set_server_file_path("../atm9/startserver.bat")
-        # uvicorn.run("src.main:app", host='0.0.0.0', port=9000, reload=True)
         return
     app = QApplication(sys.argv)
     wg = OpenServerWidget()
