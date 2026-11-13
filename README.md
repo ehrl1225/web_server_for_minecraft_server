@@ -10,13 +10,13 @@ FastAPI와 PyQt6를 결합하여 마인크래프트 서버의 실행/종료 및 
 
 ```mermaid
 flowchart TD
-    UserGUI[사용자 / 데스크톱] -->|실행 및 설정| PyQt[PyQt6 GUI: OpenServerWidget]
-    PyQt -->|subprocess uv run uvicorn| FastAPI[FastAPI 웹 서버: main.py]
+    UserGUI["사용자 / 데스크톱"] -->|"실행 및 설정"| PyQt["PyQt6 GUI: OpenServerWidget"]
+    PyQt -->|"subprocess uv run uvicorn"| FastAPI["FastAPI 웹 서버: main.py"]
     
-    WebClient[외부 사용자 / 웹 브라우저] -->|HTTP REST / WebSocket| FastAPI
+    WebClient["외부 사용자 / 웹 브라우저"] -->|"HTTP REST / WebSocket"| FastAPI
     
-    FastAPI -->|서버 제어 및 콘솔 입출력| MC[마인크래프트 서버 프로세스 (.bat)]
-    PyQt -->|경로 저장 / 직접 명령 전송 시도| MC
+    FastAPI -->|"서버 제어 및 콘솔 입출력"| MC["마인크래프트 서버 프로세스 (.bat)"]
+    PyQt -->|"경로 저장 / 직접 명령 전송 시도"| MC
 ```
 
 1. **PyQt6 GUI 실행 (`main.py` -> `OpenServerWidget`)**:
