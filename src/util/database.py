@@ -47,7 +47,7 @@ async def monitor_minecraft_server():
     from src.router import server_data
 
     ping_fail_count = 0
-    poll_interval = 2  # 주기(초)
+    tick_count = 0
 
     while True:
         try:
@@ -66,8 +66,9 @@ async def monitor_minecraft_server():
                 server_status_cache.empty_seconds = 0
                 ping_fail_count = 0
             else:
-                # RAM 사용량 측정
-                server_status_cache.ram_usage_gb = _calc_process_ram_gb(server_data.server_process)
+                # 2초마다 RAM 사용량 갱신
+                if tick_count % 2 == 0:
+                    server_status_cache.ram_usage_gb = _calc_process_ram_gb(server_data.server_process)
 
                 # 종료 진행 중인 경우
                 if getattr(server_data, "is_stopping", False):
@@ -84,22 +85,23 @@ async def monitor_minecraft_server():
                         server_status_cache.is_online = True
                         server_status_cache.is_stopping = False
 
-                        # 2. 온라인 상태일 때 mcstatus로 실시간 핑 및 접속자 수 조회
-                        port = _get_server_port_from_properties(server_data.server_file_path)
-                        try:
-                            server = await JavaServer.async_lookup(f"127.0.0.1:{port}", timeout=2.0)
-                            status = await server.async_status()
-                            server_status_cache.player_count = status.players.online
-                            server_status_cache.max_players = status.players.max
-                            ping_fail_count = 0
-                        except Exception:
-                            ping_fail_count += 1
-                            if ping_fail_count > 3:
-                                server_status_cache.player_count = 0
+                        # 2. 2초마다 mcstatus로 실시간 핑 및 접속자 수 조회
+                        if tick_count % 2 == 0:
+                            port = _get_server_port_from_properties(server_data.server_file_path)
+                            try:
+                                server = await JavaServer.async_lookup(f"127.0.0.1:{port}", timeout=1.8)
+                                status = await server.async_status()
+                                server_status_cache.player_count = status.players.online
+                                server_status_cache.max_players = status.players.max
+                                ping_fail_count = 0
+                            except Exception:
+                                ping_fail_count += 1
+                                if ping_fail_count > 3:
+                                    server_status_cache.player_count = 0
 
-                        # 3. 빈 서버 자동 종료(Auto-Stop) 검사
+                        # 3. 빈 서버 자동 종료 카운터: 매 1초마다 정확히 1초씩 누적
                         if server_status_cache.player_count == 0:
-                            server_status_cache.empty_seconds += poll_interval
+                            server_status_cache.empty_seconds += 1
                             timeout_seconds = server_status_cache.auto_stop_timeout_minutes * 60
 
                             if (
@@ -122,8 +124,9 @@ async def monitor_minecraft_server():
                         server_status_cache.player_count = 0
                         server_status_cache.empty_seconds = 0
 
-            await asyncio.sleep(poll_interval)
+            tick_count += 1
+            await asyncio.sleep(1)
         except asyncio.CancelledError:
             break
         except Exception:
-            await asyncio.sleep(poll_interval)
+            await asyncio.sleep(1)
