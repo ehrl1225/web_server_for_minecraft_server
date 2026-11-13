@@ -177,7 +177,11 @@
             }
 
             if (status.player_count !== undefined) {
-                playerCountEl.innerText = `${status.player_count} 명`;
+                if (status.max_players !== undefined) {
+                    playerCountEl.innerHTML = `${status.player_count} <span class="text-sm text-gray-500">/ ${status.max_players} 명</span>`;
+                } else {
+                    playerCountEl.innerText = `${status.player_count} 명`;
+                }
             }
         }
 
