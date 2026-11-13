@@ -37,30 +37,35 @@ flowchart TD
 web_server_for_minecraft_server/
 ├── main.py                     # 애플리케이션 진입점 (FastAPI 앱 정의 및 PyQt6 실행)
 ├── run.bat                     # 빠른 실행 배치 파일 (uv run main.py)
-├── pyproject.toml              # 프로젝트 의존성 설정 (uv / setuptools)
+├── pyproject.toml              # 프로젝트 의존성 및 pytest 설정
 ├── README.md                   # 프로젝트 설명 및 상태 문서
-└── src/
-    ├── gui/
-    │   ├── __init__.py
-    │   ├── api_server_worker.py  # Uvicorn 서브프로세스 실행 및 Taskkill 관리 QObject
-    │   └── open_server_widget.py # PyQt6 메인 GUI 윈도우
-    ├── models/
-    │   ├── __init__.py
-    │   └── models.py             # FastAPI 요청용 Pydantic 모델 (Command, ReadLine)
-    ├── router/
-    │   ├── __init__.py
-    │   ├── server_manager.py     # 마인크래프트 서버 제어 REST API 라우터
-    │   └── websocket.py          # 실시간 웹소켓 라우터 (/ws/stream)
-    ├── templates/
-    │   ├── index.html            # 실시간 웹소켓 + Tailwind + Chart.js 통합 대시보드
-    │   └── new_index.html        # 대시보드 백업 템플릿
-    └── util/
-        ├── __init__.py
-        ├── database.py           # 서버 상태 캐시 및 백그라운드 모니터링 태스크
-        ├── message_type.py       # 웹소켓 메시지 Enum (ERROR, STATUS, LOG)
-        ├── server_data.py        # 마인크래프트 프로세스 실행/중지, 입출력 핵심 클래스
-        ├── server_log.py         # 로그 관리 유틸리티 클래스
-        └── server_status.py      # 서버 상태 데이터 클래스
+├── src/
+│   ├── gui/
+│   │   ├── __init__.py
+│   │   ├── api_server_worker.py  # Uvicorn 서브프로세스 실행 및 Taskkill 관리 QObject
+│   │   └── open_server_widget.py # PyQt6 메인 GUI 윈도우
+│   ├── models/
+│   │   ├── __init__.py
+│   │   └── models.py             # FastAPI 요청용 Pydantic 모델 (Command, ReadLine)
+│   ├── router/
+│   │   ├── __init__.py
+│   │   ├── server_manager.py     # 마인크래프트 서버 제어 REST API 라우터
+│   │   └── websocket.py          # 실시간 웹소켓 라우터 (/ws/stream)
+│   ├── templates/
+│   │   ├── index.html            # 실시간 웹소켓 + Tailwind + Chart.js 통합 대시보드
+│   │   └── new_index.html        # 대시보드 백업 템플릿
+│   └── util/
+│       ├── __init__.py
+│       ├── database.py           # 서버 상태 캐시 및 백그라운드 모니터링 태스크
+│       ├── message_type.py       # 웹소켓 메시지 Enum (ERROR, STATUS, LOG)
+│       ├── server_data.py        # 마인크래프트 프로세스 실행/중지, 입출력 핵심 클래스
+│       ├── server_log.py         # 로그 관리 유틸리티 클래스
+│       └── server_status.py      # 서버 상태 데이터 클래스
+└── tests/
+    ├── test_gui.py             # PyQt6 메인 위젯 초기화 테스트
+    ├── test_rest_api.py        # FastAPI REST API 엔드포인트 테스트
+    ├── test_server_data.py     # ServerData 및 상태 모델 단위 테스트
+    └── test_websocket.py       # 실시간 웹소켓 연결 및 양방향 통신 테스트
 ```
 
 ---
@@ -77,16 +82,22 @@ web_server_for_minecraft_server/
 | **백엔드 & 실시간성** | 웹소켓 라우터 (`/ws/stream`) | ✅ 완료 | 양방향 통신 (로그 실시간 tailing, 상태 브로드캐스트, 액션 처리) |
 | | 백그라운드 모니터링 | ✅ 완료 | `monitor_minecraft_server` 비동기 루프로 서버 시작/구동 완료 상태 추적 |
 | | 로그/프로세스 입출력 | ✅ 완료 | `ServerData`의 버그 수정, UTF-8 인코딩 및 stdin flush 처리 |
+| **테스트 자동화** | 단위 및 통합 테스트 (`pytest`) | ✅ 완료 | REST API, 웹소켓, 핵심 로직, GUI 등 11개 테스트 전원 통과 (100%) |
 
 ---
 
-## 🚀 실행 방법
+## 🚀 실행 및 테스트 방법
 
 ### 요구 사항
 - Python >= 3.11
 - [uv](https://github.com/astral-sh/uv) 패키지 매니저
 
-### 실행
+### 테스트 실행
+```bash
+uv run pytest
+```
+
+### 서버 실행
 ```bash
 # GUI 실행 (기본)
 uv run python main.py

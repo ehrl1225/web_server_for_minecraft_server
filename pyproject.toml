@@ -1,7 +1,7 @@
 [project]
 name = "web-server-for-minecraft-server"
 version = "0.1.0"
-description = "Add your description here"
+description = "FastAPI & PyQt6 Minecraft server controller"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -13,3 +13,16 @@ dependencies = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.2.0",
+    "pytest-asyncio>=1.5.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
