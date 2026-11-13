@@ -49,7 +49,6 @@ async def websocket_endpoint(websocket: WebSocket):
 
             current_size = os.path.getsize(log_path)
             if current_size < last_pos:
-                # 로그 파일이 새로 쓰여진 경우 (서버 재시작 등)
                 last_pos = 0
 
             if current_size > last_pos:
@@ -86,16 +85,17 @@ async def websocket_endpoint(websocket: WebSocket):
             data = await websocket.receive_json()
             action = data.get("action")
             if action == "start":
-                res = server_data.start()
+                server_data.start()
                 server_status_cache.is_starting = True
                 await websocket.send_json({
                     "type": MessageType.STATUS.value,
                     "data": server_status_cache.to_dict()
                 })
             elif action == "stop":
-                res = server_data.stop()
+                server_data.stop()
                 server_status_cache.is_starting = False
                 server_status_cache.is_online = False
+                server_status_cache.empty_seconds = 0
                 await websocket.send_json({
                     "type": MessageType.STATUS.value,
                     "data": server_status_cache.to_dict()
@@ -104,6 +104,18 @@ async def websocket_endpoint(websocket: WebSocket):
                 cmd = data.get("data", "")
                 if cmd:
                     server_data.send_command(cmd)
+            elif action == "set_auto_stop":
+                # 자동 종료 설정 업데이트 (enabled, timeout_minutes)
+                enabled = data.get("enabled")
+                timeout = data.get("timeout_minutes")
+                if enabled is not None:
+                    server_status_cache.auto_stop_enabled = bool(enabled)
+                if timeout is not None:
+                    server_status_cache.auto_stop_timeout_minutes = max(1, int(timeout))
+                await websocket.send_json({
+                    "type": MessageType.STATUS.value,
+                    "data": server_status_cache.to_dict()
+                })
 
     try:
         await asyncio.gather(stream_logs(), stream_status(), receive_commands())
