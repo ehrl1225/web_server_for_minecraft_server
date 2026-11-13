@@ -12,9 +12,9 @@ import sys
 
 from src.util import monitor_minecraft_server
 
-# 2초마다 발생하는 /is-started, /is-on 등의 단순 폴링 로그를 uvicorn 콘솔에서 숨김
+# 2초마다 발생하는 GUI 폴링 로그(/status, /is-started, /is-on, /get-console-output 등)를 uvicorn 콘솔에서 숨김
 logging.getLogger("uvicorn.access").addFilter(
-    EndpointFilter(excluded_paths=["/is-started", "/is-on", "/ping"])
+    EndpointFilter(excluded_paths=["/status", "/is-started", "/is-on", "/get-console-output", "/ping"])
 )
 
 NO_GUI = False

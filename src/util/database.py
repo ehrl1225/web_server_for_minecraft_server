@@ -1,5 +1,6 @@
 import asyncio
 import os
+import psutil
 from mcstatus import JavaServer
 from .server_status import ServerStatus
 from .config import load_config
@@ -24,8 +25,25 @@ def _get_server_port_from_properties(server_file_path: str | None) -> int:
     return 25565
 
 
+def _calc_process_ram_gb(proc) -> float:
+    """마인크래프트 프로세스 및 자식 Java 프로세스들의 총 물리 메모리(RSS) 합산 (GB 단위)"""
+    if proc is None or proc.poll() is not None:
+        return 0.0
+    try:
+        parent = psutil.Process(proc.pid)
+        total_rss = parent.memory_info().rss
+        for child in parent.children(recursive=True):
+            try:
+                total_rss += child.memory_info().rss
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+        return round(total_rss / (1024 ** 3), 2)
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        return 0.0
+
+
 async def monitor_minecraft_server():
-    """마인크래프트 서버 상태, 접속자 수 및 빈 서버 자동 종료(Auto-Stop)를 관리하는 태스크"""
+    """마인크래프트 서버 상태, 접속자 수, RAM 사용량 및 빈 서버 자동 종료(Auto-Stop)를 관리하는 태스크"""
     from src.router import server_data
 
     ping_fail_count = 0
@@ -44,9 +62,13 @@ async def monitor_minecraft_server():
                 server_status_cache.is_online = False
                 server_status_cache.is_stopping = False
                 server_status_cache.player_count = 0
+                server_status_cache.ram_usage_gb = 0.0
                 server_status_cache.empty_seconds = 0
                 ping_fail_count = 0
             else:
+                # RAM 사용량 측정
+                server_status_cache.ram_usage_gb = _calc_process_ram_gb(server_data.server_process)
+
                 # 종료 진행 중인 경우
                 if getattr(server_data, "is_stopping", False):
                     server_status_cache.is_starting = False
