@@ -3,117 +3,266 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>마인크래프트 서버 관리</title>
-    <script src="https://tailwindcss.com"></script>
-    <script src="https://jsdelivr.net"></script>
+    <title>Minecraft Modpack Server Panel</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: #1f2937; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 3px; }
-        @keyframes pulse { 0%, 100% {opacity: 1;} 50% {opacity: .5; } }
-        .animate-pulse-fast {animation: pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+        .animate-pulse-fast { animation: pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
     </style>
 </head>
 <body class="bg-gray-900 text-gray-100 font-sans antialiased min-h-screen">
-    <h1>마인크래프트 서버</h1>
-    <h2 id="is_started">서버 시작 여부</h2>
-    <h2 id="is_on">서버 열림 여부</h2>
-    <button id="start_btn">서버 시작</button>
-    <button id="stop_btn">서버 종료</button>
-    <br>
-    <br>
-    <br>
-    <input type="checkbox" name="log" id="auto_refresh"/>
-    <button id="auto_refresh_btn">로그 불러오기(토글)</button>
-    <button id="scroll_up_btn">로그 올리기</button>
-    <button id="scroll_down_btn">로그 밑으로 내리기</button>
-    <br>
-    <textarea id="log" rows="20", cols="60">로그:</textarea>
 
+    <div class="container mx-auto px-4 py-6">
+        <!-- 1. 상단 헤더 -->
+        <header class="flex justify-between items-center border-b border-gray-800 pb-4 mb-6">
+            <div>
+                <h1 class="text-2xl font-bold text-white tracking-wide">🎮 마인크래프트 서버 제어 패널</h1>
+                <p class="text-sm text-gray-400">FastAPI 실시간 웹소켓 제어 센터</p>
+            </div>
+            <!-- 웹소켓 연결 상태 인디케이터 -->
+            <div class="flex items-center space-x-2 bg-gray-800 px-3 py-1.5 rounded-full border border-gray-700">
+                <span id="ws-indicator" class="h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse-fast"></span>
+                <span id="ws-status-text" class="text-xs font-medium text-gray-300">연결 끊김</span>
+            </div>
+        </header>
+
+        <!-- 2. 실시간 상태 카드 세션 -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <!-- 서버 상태 -->
+            <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 shadow-lg">
+                <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">서버 구동 상태</p>
+                <p id="server-status" class="text-xl font-bold mt-1 text-red-400">오프라인</p>
+            </div>
+            <!-- 메모리 점유율 -->
+            <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 shadow-lg">
+                <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">할당된 RAM 사용량</p>
+                <p id="server-ram" class="text-xl font-bold mt-1 text-blue-400">0 GB <span class="text-sm text-gray-500">/ 16 GB</span></p>
+            </div>
+            <!-- 동접자 -->
+            <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 shadow-lg">
+                <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">현재 접속자 수</p>
+                <p id="player-count" class="text-xl font-bold mt-1 text-green-400">0 명</p>
+            </div>
+        </div>
+
+        <!-- 3. 메인 그리드 영역 -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <!-- 좌측: 실시간 콘솔 및 명령어 창 (비중 2칸) -->
+            <div class="lg:col-span-2 flex flex-col space-y-4">
+                <div class="bg-black rounded-xl p-4 border border-gray-800 shadow-2xl flex-1 flex flex-col min-h-[500px]">
+                    <div class="flex justify-between items-center pb-2 border-b border-gray-900 mb-2">
+                        <span class="text-xs font-mono text-gray-500">LIVE CONSOLE</span>
+                        <button onclick="clearConsole()" class="text-xs text-gray-400 hover:text-white transition">지우기</button>
+                    </div>
+                    <!-- 실시간 로그 출력 영역 -->
+                    <div id="console-logs" class="flex-1 font-mono text-sm overflow-y-auto custom-scrollbar space-y-1 h-[450px] text-gray-300 select-text p-2">
+                        <div class="text-gray-500">[System] 웹소켓 연결을 기다리는 중...</div>
+                    </div>
+                </div>
+
+                <!-- 명령어 입력 창 -->
+                <div class="flex space-x-2">
+                    <input type="text" id="cmd-input" placeholder="서버 콘솔 명령어를 입력하세요... (예: help, op ehrl1225)"
+                           class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:border-green-500 font-mono text-sm"
+                           onkeypress="if(event.keyCode==13) sendCommand()">
+                    <button onclick="sendCommand()" class="bg-green-600 hover:bg-green-500 text-white font-medium px-6 py-2 rounded-lg transition text-sm">전송</button>
+                </div>
+            </div>
+
+            <!-- 우측: 제어 패널 및 실시간 차트 (비중 1칸) -->
+            <div class="flex flex-col space-y-4">
+                <!-- 제어 버튼 카드 -->
+                <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 shadow-lg">
+                    <h3 class="text-sm font-semibold text-white mb-3">전원 제어</h3>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button id="btn-start" onclick="controlServer('start')" class="bg-blue-600 hover:bg-blue-500 text-white font-medium py-2.5 rounded-lg transition text-sm shadow-md">서버 켜기</button>
+                        <button id="btn-stop" onclick="controlServer('stop')" class="bg-red-600 hover:bg-red-500 text-white font-medium py-2.5 rounded-lg transition text-sm shadow-md">안전 종료</button>
+                    </div>
+                </div>
+
+                <!-- 차트 시각화 카드 -->
+                <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 shadow-lg flex-1">
+                    <h3 class="text-sm font-semibold text-white mb-3">실시간 메모리 변동 그래프</h3>
+                    <div class="w-full h-48 flex items-center justify-center">
+                        <canvas id="ramChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- 4. 프론트엔드 자바스크립트 및 웹소켓 연동 -->
+    <script>
+        const logArea = document.getElementById("console-logs");
+        const wsIndicator = document.getElementById("ws-indicator");
+        const wsStatusText = document.getElementById("ws-status-text");
+        const statusEl = document.getElementById("server-status");
+        const playerCountEl = document.getElementById("player-count");
+        const ramEl = document.getElementById("server-ram");
+
+        let socket = null;
+        let reconnectInterval = null;
+
+        function connectWebSocket() {
+            const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+            const wsUrl = `${wsProtocol}//${window.location.host}/ws/stream`;
+
+            socket = new WebSocket(wsUrl);
+
+            socket.onopen = function() {
+                wsIndicator.className = "h-2.5 w-2.5 rounded-full bg-green-500";
+                wsStatusText.innerText = "연결됨";
+                appendLog("<div class='text-green-400'>[System] 웹소켓 연결 성공.</div>");
+                if (reconnectInterval) {
+                    clearInterval(reconnectInterval);
+                    reconnectInterval = null;
+                }
+            };
+
+            socket.onmessage = function(event) {
+                try {
+                    const message = JSON.parse(event.data);
+                    if (message.type === "status") {
+                        updateUIStatus(message.data);
+                    } else if (message.type === "log") {
+                        appendLog(`<div>${escapeHtml(message.data)}</div>`);
+                    } else if (message.type === "error") {
+                        appendLog(`<div class='text-yellow-500'>[Warning] ${escapeHtml(message.data)}</div>`);
+                    }
+                } catch(e) {
+                    console.error("Message parse error:", e);
+                }
+            };
+
+            socket.onclose = function() {
+                wsIndicator.className = "h-2.5 w-2.5 rounded-full bg-red-500 animate-pulse-fast";
+                wsStatusText.innerText = "연결 끊김";
+                appendLog("<div class='text-red-400'>[System] 서버와의 연결이 닫혔습니다. 재연결을 시도합니다...</div>");
+                if (!reconnectInterval) {
+                    reconnectInterval = setInterval(connectWebSocket, 3000);
+                }
+            };
+
+            socket.onerror = function() {
+                socket.close();
+            };
+        }
+
+        // HTML Escape 유틸
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.innerText = text;
+            return div.innerHTML;
+        }
+
+        // UI 상태 업데이트
+        function updateUIStatus(status) {
+            if (status.is_starting) {
+                statusEl.innerText = "켜지는 중...";
+                statusEl.className = "text-xl font-bold mt-1 text-yellow-400";
+            } else if (status.is_online) {
+                statusEl.innerText = "온라인";
+                statusEl.className = "text-xl font-bold mt-1 text-green-400";
+            } else {
+                statusEl.innerText = "오프라인";
+                statusEl.className = "text-xl font-bold mt-1 text-red-400";
+            }
+
+            if (status.player_count !== undefined) {
+                playerCountEl.innerText = `${status.player_count} 명`;
+            }
+        }
+
+        // 로그 출력 및 자동 스크롤
+        function appendLog(htmlContent) {
+            logArea.innerHTML += htmlContent;
+            logArea.scrollTop = logArea.scrollHeight;
+        }
+
+        function clearConsole() { 
+            logArea.innerHTML = ""; 
+        }
+
+        // 서버 켜기 / 끄기
+        function controlServer(action) {
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ "action": action }));
+                appendLog(`<div class='text-blue-400'>[Command] ${action === 'start' ? '서버 시작 요청 전송' : '서버 종료 요청 전송'}</div>`);
+            } else {
+                alert("웹소켓이 연결되어 있지 않습니다.");
+            }
+        }
+
+        // 명령어 전송
+        function sendCommand() {
+            const input = document.getElementById("cmd-input");
+            const val = input.value.trim();
+            if (!val) return;
+
+            if (socket && socket.readyState === WebSocket.OPEN) {
+                socket.send(JSON.stringify({ "action": "command", "data": val }));
+                appendLog(`<div class='text-green-400'>&gt; ${escapeHtml(val)}</div>`);
+                input.value = "";
+            } else {
+                alert("웹소켓이 연결되어 있지 않습니다.");
+            }
+        }
+
+        // Chart.js 초기화
+        let ramChart = null;
+        try {
+            const ctx = document.getElementById('ramChart').getContext('2d');
+            ramChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: Array(10).fill(''),
+                    datasets: [{
+                        label: 'RAM 사용량 (GB)',
+                        data: Array(10).fill(0),
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { min: 0, max: 16, grid: { color: '#374151' }, ticks: { color: '#9ca3af' } },
+                        x: { grid: { display: false } }
+                    },
+                    plugins: { legend: { display: false } }
+                }
+            });
+        } catch (e) {
+            console.warn("Chart.js init failed:", e);
+        }
+
+        // 주기적 RAM 데모 시뮬레이션
+        setInterval(() => {
+            if (statusEl.innerText === "온라인" && ramChart) {
+                const mockRam = (Math.random() * 4 + 8).toFixed(1);
+                ramEl.innerHTML = `${mockRam} GB <span class="text-sm text-gray-500">/ 16 GB</span>`;
+                ramChart.data.datasets[0].data.shift();
+                ramChart.data.datasets[0].data.push(mockRam);
+                ramChart.update();
+            } else if (statusEl.innerText === "오프라인" && ramChart) {
+                ramEl.innerHTML = `0 GB <span class="text-sm text-gray-500">/ 16 GB</span>`;
+            }
+        }, 3000);
+
+        // 첫 로드 시 웹소켓 연결
+        window.addEventListener("DOMContentLoaded", connectWebSocket);
+    </script>
 </body>
-<script>
-    const is_started = document.getElementById('is_started');
-    const is_on = document.getElementById('is_on');
-    const start_btn = document.getElementById('start_btn');
-    const end_btn = document.getElementById('stop_btn');
-    const log_refresh_btn = document.getElementById('auto_refresh_btn');
-    const log_textarea = document.getElementById('log');
-    const auto_refresh_chb = document.getElementById('auto_refresh');
-    const scroll_up_btn = document.getElementById('scroll_up_btn');
-    const scroll_down_btn = document.getElementById('scroll_down_btn');
-    let logs = ["로그:"];
-
-    async function update_is_started() {
-        const response = await fetch('/is-started', {method:'GET'});
-        const result = await response.json();
-        if (result.is_started === true){
-            is_started.textContent = "서버 시작 여부 : 켜짐";
-        }else{
-            is_started.textContent = "서버 시작 여부 : 꺼짐";
-        }
-        const response2 = await fetch('/is-on', {method:'GET'});
-        const result2 = await response2.json();
-        if (result2.is_on === true) {
-            is_on.textContent = "서버 열림 여부 : 열려있음";
-        }else{
-            is_on.textContent = "서버 열림 여부 : 닫혀있음";
-        }
-        return result.is_started;
-    }
-
-    async function update_log(){
-        if (!auto_refresh_chb.checked){
-            return;
-        }
-        const response = await fetch("/get-console-output",
-           {
-               method:'POST',
-               headers: {
-                   'Accept': 'application/json',
-                   'Content-Type': 'application/json'
-               },
-               body: JSON.stringify({
-                   startline:logs.length+1
-               }),
-           }
-       );
-       const result = await response.json();
-       result.console_output.forEach((item, idx)=>{
-           logs.push(item);
-       });
-       log_textarea.innerHTML = logs.join('\n');
-    }
-    let timerId = setInterval(() => {
-        update_log();
-        let is_started = update_is_started();
-        if (!is_started){
-            auto_refresh_chb.checked = false;
-        }
-
-    },1000);
-
-    start_btn.addEventListener('click', async () => {
-        fetch("/start-server", {method:'post'});
-        update_is_started();
-        logs.splice(1, logs.length);
-        auto_refresh_chb.checked=true;
-    });
-    end_btn.addEventListener('click', async () => {
-        fetch("/stop-server", {method:'post'});
-        update_is_started();
-        auto_refresh_chb.checked=false;
-    });
-    log_refresh_btn.addEventListener('click', async () => {
-       auto_refresh_chb.checked=!auto_refresh_chb.checked
-    });
-    scroll_up_btn.addEventListener('click', async () => {
-        log_textarea.scrollTop = 0;
-    });
-    scroll_down_btn.addEventListener('click', async () => {
-        log_textarea.scrollTop = log_textarea.scrollHeight;
-    });
-
-    update_is_started();
-
-</script>
 </html>
