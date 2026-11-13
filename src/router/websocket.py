@@ -87,25 +87,33 @@ async def websocket_endpoint(websocket: WebSocket):
             if action == "start":
                 server_data.start()
                 server_status_cache.is_starting = True
+                server_status_cache.is_stopping = False
                 await websocket.send_json({
                     "type": MessageType.STATUS.value,
                     "data": server_status_cache.to_dict()
                 })
             elif action == "stop":
-                server_data.stop()
-                server_status_cache.is_starting = False
-                server_status_cache.is_online = False
-                server_status_cache.empty_seconds = 0
-                await websocket.send_json({
-                    "type": MessageType.STATUS.value,
-                    "data": server_status_cache.to_dict()
-                })
+                # 접속 중인 플레이어가 0명일 때만 종료 허용
+                if server_status_cache.player_count > 0:
+                    await websocket.send_json({
+                        "type": MessageType.ERROR.value,
+                        "data": f"현재 {server_status_cache.player_count}명의 플레이어가 접속 중이어서 서버를 끌 수 없습니다."
+                    })
+                else:
+                    server_data.stop()
+                    server_status_cache.is_starting = False
+                    server_status_cache.is_online = False
+                    server_status_cache.is_stopping = True
+                    server_status_cache.empty_seconds = 0
+                    await websocket.send_json({
+                        "type": MessageType.STATUS.value,
+                        "data": server_status_cache.to_dict()
+                    })
             elif action == "command":
                 cmd = data.get("data", "")
                 if cmd:
                     server_data.send_command(cmd)
             elif action == "set_auto_stop":
-                # 자동 종료 설정 업데이트 (enabled, timeout_minutes)
                 enabled = data.get("enabled")
                 timeout = data.get("timeout_minutes")
                 if enabled is not None:

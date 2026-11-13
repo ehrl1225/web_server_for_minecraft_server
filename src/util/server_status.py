@@ -4,6 +4,7 @@ from .config import load_config
 class ServerStatus:
     is_starting: bool = False
     is_online: bool = False
+    is_stopping: bool = False
     player_count: int = 0
     max_players: int = 20
     ram_usage_gb: float = 0.0
@@ -16,12 +17,13 @@ class ServerStatus:
 
     def to_dict(self) -> dict:
         remaining = 0
-        if self.auto_stop_enabled and self.is_online and self.player_count == 0:
+        if self.auto_stop_enabled and self.is_online and self.player_count == 0 and not self.is_stopping:
             remaining = max(0, (self.auto_stop_timeout_minutes * 60) - self.empty_seconds)
 
         return {
             "is_starting": self.is_starting,
             "is_online": self.is_online,
+            "is_stopping": self.is_stopping,
             "player_count": self.player_count,
             "max_players": self.max_players,
             "ram_usage_gb": self.ram_usage_gb,
