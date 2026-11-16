@@ -5,7 +5,7 @@ from PyQt6.QtGui import QCloseEvent, QTextCursor
 from PyQt6.QtWidgets import (
     QWidget, QLineEdit, QPushButton, QHBoxLayout, QVBoxLayout,
     QFileDialog, QMessageBox, QLabel, QSpinBox, QCheckBox, QGroupBox,
-    QTextEdit, QSplitter
+    QTextEdit, QSplitter, QTabWidget, QGridLayout
 )
 from PyQt6.QtCore import Qt
 from src.router import server_data
@@ -21,6 +21,7 @@ class OpenServerWidget(QWidget):
         self.setWindowTitle("마인크래프트 웹서버 호스트 관리자")
         self.resize(750, 620)
         self.last_log_line = 0
+        self.mc_was_started = False
         self.initUI()
 
     def initUI(self):
@@ -100,16 +101,76 @@ class OpenServerWidget(QWidget):
         command_hbox.addWidget(self.command_btn)
         command_group.setLayout(command_hbox)
 
+        # [탭 1: 서버 제어 및 콘솔] 위젯
+        tab1_widget = QWidget()
+        tab1_layout = QVBoxLayout()
+        tab1_layout.addWidget(status_group)
+        tab1_layout.addWidget(autostop_group)
+        tab1_layout.addWidget(log_group, stretch=1)
+        tab1_layout.addWidget(command_group)
+        tab1_widget.setLayout(tab1_layout)
+
+        # [탭 2: 서버 가동 및 접속자 통계] 위젯
+        tab2_widget = QWidget()
+        tab2_layout = QVBoxLayout()
+
+        # Query 비활성화 경고 배너
+        self.query_warning_lb = QLabel(
+            "⚠️ 마인크래프트 server.properties에 'enable-query=true' 설정이 되어있지 않아 플레이어 통계를 수집할 수 없습니다.\n"
+            "   (정확한 접속자 통계를 이용하려면 server.properties 파일에서 enable-query=true로 변경 후 서버를 재시작하세요)"
+        )
+        self.query_warning_lb.setStyleSheet(
+            "background-color: #7F1D1D; color: #FCA5A5; padding: 10px; border-radius: 8px; font-weight: bold; font-size: 11px;"
+        )
+        self.query_warning_lb.setVisible(False)
+        tab2_layout.addWidget(self.query_warning_lb)
+
+        # 통계 요약 그룹박스
+        summary_group = QGroupBox("누적 및 세션 요약 통계")
+        grid = QGridLayout()
+
+        self.stat_web_start_lb = QLabel("웹서버 최근 시작: -")
+        self.stat_web_uptime_lb = QLabel("웹서버 누적 가동 시간: 0분")
+        self.stat_mc_runs_lb = QLabel("MC 서버 실행 횟수: 0 회")
+        self.stat_mc_uptime_lb = QLabel("MC 서버 누적 가동 시간: 0분")
+        self.stat_peak_players_lb = QLabel("최대 동시 접속자(Peak): 0 명")
+        self.stat_unique_players_lb = QLabel("방문한 고유 플레이어: 0 명 (-)")
+
+        grid.addWidget(self.stat_web_start_lb, 0, 0)
+        grid.addWidget(self.stat_web_uptime_lb, 0, 1)
+        grid.addWidget(self.stat_mc_runs_lb, 1, 0)
+        grid.addWidget(self.stat_mc_uptime_lb, 1, 1)
+        grid.addWidget(self.stat_peak_players_lb, 2, 0)
+        grid.addWidget(self.stat_unique_players_lb, 2, 1)
+        summary_group.setLayout(grid)
+
+        # 중요 이벤트 히스토리 뷰어
+        events_group = QGroupBox("최근 시스템 및 플레이어 이벤트 히스토리")
+        events_layout = QVBoxLayout()
+        self.events_text_edit = QTextEdit()
+        self.events_text_edit.setReadOnly(True)
+        self.events_text_edit.setStyleSheet(
+            "background-color: #111827; color: #60A5FA; font-family: Consolas, monospace; font-size: 11px;"
+        )
+        events_layout.addWidget(self.events_text_edit)
+        events_group.setLayout(events_layout)
+
+        tab2_layout.addWidget(summary_group)
+        tab2_layout.addWidget(events_group, stretch=1)
+        tab2_widget.setLayout(tab2_layout)
+
+        # 탭 컨테이너 구성
+        self.tabs = QTabWidget()
+        self.tabs.addTab(tab1_widget, "🎮 서버 제어 & 콘솔")
+        self.tabs.addTab(tab2_widget, "📊 통계 및 이벤트 로그")
+
         self.server_worker = ApiServerWorker()
 
         # 전체 레이아웃 구성
         vbox = QVBoxLayout()
         vbox.addLayout(url_hbox)
         vbox.addLayout(server_btn_hbox)
-        vbox.addWidget(status_group)
-        vbox.addWidget(autostop_group)
-        vbox.addWidget(log_group, stretch=1)
-        vbox.addWidget(command_group)
+        vbox.addWidget(self.tabs, stretch=1)
 
         self.setLayout(vbox)
         self.setUI()
@@ -187,6 +248,7 @@ class OpenServerWidget(QWidget):
         self.start_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
         self.server_started = False
+        self.mc_was_started = False
         self.mc_status_lb.setText("상태: 오프라인 (웹서버 정지됨)")
         self.mc_players_lb.setText("접속자: 0 명")
         self.mc_ram_lb.setText("RAM 사용량: 0.0 GB")
@@ -232,7 +294,13 @@ class OpenServerWidget(QWidget):
                 self.mc_status_lb.setText("상태: 켜지는 중 (부팅 중)...")
                 self.mc_autostop_lb.setText("빈 서버 자동 종료: 부팅 대기 중")
 
-            # 2. 콘솔 로그 실시간 가져오기 (/get-console-output)
+            # 2. 서버가 새로 시작(부팅 시작 또는 재시작)되었는지 확인하여 로그 리셋
+            if is_started and not self.mc_was_started:
+                self.last_log_line = 0
+                self.log_text_edit.clear()
+            self.mc_was_started = is_started
+
+            # 3. 콘솔 로그 실시간 가져오기 (/get-console-output)
             log_res = requests.post(
                 f"{base_url}/get-console-output",
                 json={"startline": self.last_log_line},
@@ -248,6 +316,51 @@ class OpenServerWidget(QWidget):
                 cursor = self.log_text_edit.textCursor()
                 cursor.movePosition(QTextCursor.MoveOperation.End)
                 self.log_text_edit.setTextCursor(cursor)
+
+            # 4. 통계 탭이 열려있거나 주기적으로 통계 및 이벤트 히스토리 갱신 (/statistics)
+            try:
+                stat_res = requests.get(f"{base_url}/statistics", timeout=1).json()
+                stats = stat_res.get("stats", {})
+                events = stat_res.get("recent_events", [])
+                query_enabled = stat_res.get("query_enabled", True)
+
+                # Query 비활성화 여부 경고 표시 (서버가 켜져 있을 때 query가 꺼져있으면 표시)
+                if is_started and not query_enabled:
+                    self.query_warning_lb.setVisible(True)
+                else:
+                    self.query_warning_lb.setVisible(False)
+
+                # 웹서버 통계 라벨
+                web_start = stats.get("web_start_time") or "-"
+                web_uptime = stats.get("web_uptime_seconds", 0) // 60
+                self.stat_web_start_lb.setText(f"웹서버 최근 시작: {web_start}")
+                self.stat_web_uptime_lb.setText(f"웹서버 누적 가동: {web_uptime}분")
+
+                # MC 서버 통계 라벨
+                mc_runs = stats.get("mc_run_count", 0)
+                mc_uptime = stats.get("mc_total_uptime_seconds", 0) // 60
+                self.stat_mc_runs_lb.setText(f"MC 서버 실행 횟수: {mc_runs}회")
+                self.stat_mc_uptime_lb.setText(f"MC 서버 누적 가동: {mc_uptime}분")
+
+                # 플레이어 통계 라벨
+                if is_started and not query_enabled:
+                    self.stat_peak_players_lb.setText("최대 동시 접속자(Peak): [Query 비활성화로 통계 중단]")
+                    self.stat_unique_players_lb.setText("고유 플레이어: [server.properties enable-query=true 필요]")
+                else:
+                    peak = stats.get("peak_players", 0)
+                    unique = stats.get("unique_players", [])
+                    unique_str = ", ".join(unique) if unique else "없음"
+                    self.stat_peak_players_lb.setText(f"최대 동시 접속자(Peak): {peak}명")
+                    self.stat_unique_players_lb.setText(f"고유 플레이어: {len(unique)}명 ({unique_str})")
+
+                # 최근 이벤트 텍스트 갱신
+                if events:
+                    self.events_text_edit.setPlainText("\n".join(events))
+                    events_cursor = self.events_text_edit.textCursor()
+                    events_cursor.movePosition(QTextCursor.MoveOperation.End)
+                    self.events_text_edit.setTextCursor(events_cursor)
+            except Exception:
+                pass
 
         except Exception:
             pass

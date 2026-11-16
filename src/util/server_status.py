@@ -8,6 +8,7 @@ class ServerStatus:
     player_count: int = 0
     max_players: int = 20
     ram_usage_gb: float = 0.0
+    query_enabled: bool = True
 
     def __init__(self):
         cfg = load_config()
@@ -27,6 +28,7 @@ class ServerStatus:
             "player_count": self.player_count,
             "max_players": self.max_players,
             "ram_usage_gb": self.ram_usage_gb,
+            "query_enabled": self.query_enabled,
             "auto_stop_enabled": self.auto_stop_enabled,
             "auto_stop_timeout_minutes": self.auto_stop_timeout_minutes,
             "empty_seconds": self.empty_seconds,

@@ -12,11 +12,11 @@ import uvicorn
 from src.router import server_manager, websocket_router
 from src.gui import OpenServerWidget
 from src.util.log_filter import EndpointFilter
-from src.util import monitor_minecraft_server
+from src.util import monitor_minecraft_server, stats_tracker
 
 # 2초마다 발생하는 GUI 폴링 로그(/status, /is-started, /is-on, /get-console-output 등)를 uvicorn 콘솔에서 숨김
 logging.getLogger("uvicorn.access").addFilter(
-    EndpointFilter(excluded_paths=["/status", "/is-started", "/is-on", "/get-console-output", "/ping"])
+    EndpointFilter(excluded_paths=["/status", "/is-started", "/is-on", "/get-console-output", "/ping", "/statistics"])
 )
 
 NO_GUI = False
@@ -32,6 +32,14 @@ def get_base_dir() -> Path:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("[System] FastAPI 가동 - 마인크래프트")
+    port = 9000
+    for arg in sys.argv:
+        if arg.startswith("--port="):
+            try:
+                port = int(arg.split("=")[1])
+            except ValueError:
+                pass
+    stats_tracker.record_web_start(port)
     monitor_task = asyncio.create_task(monitor_minecraft_server())
     yield
 
@@ -40,6 +48,7 @@ async def lifespan(app: FastAPI):
         await monitor_task
     except asyncio.CancelledError:
         print("[System] 모니터링 태스크가 안전하게 종료되었습니다.")
+    stats_tracker.record_web_stop()
 
 app = FastAPI(
     title="Minecraft Server Controller",
