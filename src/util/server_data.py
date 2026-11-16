@@ -15,6 +15,15 @@ class ServerData:
         self.port = None
         self.server_process = None
         self.is_stopping: bool = False
+        self.log_file = None
+
+    def _close_log_file(self):
+        if self.log_file is not None:
+            try:
+                self.log_file.close()
+            except Exception:
+                pass
+            self.log_file = None
 
     def set_server_file_path(self, file_path):
         if self.__is_started():
@@ -40,12 +49,14 @@ class ServerData:
 
     def __is_started(self) -> bool:
         if self.server_process is None:
+            self._close_log_file()
             return False
         if self.server_process.poll() is None:
             return True
         # 프로세스가 이미 종료된 경우 정리
         self.server_process = None
         self.is_stopping = False
+        self._close_log_file()
         return False
 
     def is_started(self) -> dict[str, bool]:
@@ -74,16 +85,17 @@ class ServerData:
                 return {"error": "Server executable path not found"}
             print(f"Starting server: {path}")
             self.is_stopping = False
+            self._close_log_file()
             # 로그 파일 초기화 또는 생성
             with open(log_path, "w", encoding="utf-8") as log_file:
                 log_file.write("[System] Server process initiating...\n")
 
-            log_file_append = open(log_path, "a", encoding="utf-8", buffering=1)
+            self.log_file = open(log_path, "a", encoding="utf-8", buffering=1)
             self.server_process = subprocess.Popen(
                 f'"{path}"',
                 stdin=subprocess.PIPE,
-                stdout=log_file_append,
-                stderr=log_file_append,
+                stdout=self.log_file,
+                stderr=self.log_file,
                 shell=True,
                 text=True,
                 cwd=os.path.dirname(path)
@@ -121,6 +133,7 @@ class ServerData:
                     finally:
                         self.server_process = None
                         self.is_stopping = False
+                        self._close_log_file()
                         print("[System] 마인크래프트 서버가 완전히 안전하게 종료되었습니다.")
 
                 shutdown_thread = threading.Thread(

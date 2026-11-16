@@ -21,6 +21,7 @@ class OpenServerWidget(QWidget):
         self.setWindowTitle("마인크래프트 웹서버 호스트 관리자")
         self.resize(750, 620)
         self.last_log_line = 0
+        self.mc_was_started = False
         self.initUI()
 
     def initUI(self):
@@ -187,6 +188,7 @@ class OpenServerWidget(QWidget):
         self.start_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
         self.server_started = False
+        self.mc_was_started = False
         self.mc_status_lb.setText("상태: 오프라인 (웹서버 정지됨)")
         self.mc_players_lb.setText("접속자: 0 명")
         self.mc_ram_lb.setText("RAM 사용량: 0.0 GB")
@@ -232,7 +234,13 @@ class OpenServerWidget(QWidget):
                 self.mc_status_lb.setText("상태: 켜지는 중 (부팅 중)...")
                 self.mc_autostop_lb.setText("빈 서버 자동 종료: 부팅 대기 중")
 
-            # 2. 콘솔 로그 실시간 가져오기 (/get-console-output)
+            # 2. 서버가 새로 시작(부팅 시작 또는 재시작)되었는지 확인하여 로그 리셋
+            if is_started and not self.mc_was_started:
+                self.last_log_line = 0
+                self.log_text_edit.clear()
+            self.mc_was_started = is_started
+
+            # 3. 콘솔 로그 실시간 가져오기 (/get-console-output)
             log_res = requests.post(
                 f"{base_url}/get-console-output",
                 json={"startline": self.last_log_line},
