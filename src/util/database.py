@@ -4,6 +4,7 @@ import psutil
 from mcstatus import JavaServer
 from .server_status import ServerStatus
 from .config import load_config
+from .stats_tracker import stats_tracker
 
 server_status_cache: ServerStatus = ServerStatus()
 
@@ -48,6 +49,8 @@ async def monitor_minecraft_server():
 
     ping_fail_count = 0
     tick_count = 0
+    was_online = False
+    known_online_players: set[str] = set()
 
     while True:
         try:
@@ -58,6 +61,11 @@ async def monitor_minecraft_server():
 
             started = server_data.is_started()["is_started"]
             if not started:
+                if was_online:
+                    for p in known_online_players:
+                        stats_tracker.record_player_leave(p, 0)
+                    known_online_players.clear()
+                    was_online = False
                 server_status_cache.is_starting = False
                 server_status_cache.is_online = False
                 server_status_cache.is_stopping = False
@@ -81,6 +89,10 @@ async def monitor_minecraft_server():
                     # 1. 프로세스 및 로그 기반 상태 확인
                     is_on = server_data.is_on()["is_on"]
                     if is_on:
+                        if not was_online:
+                            was_online = True
+                            stats_tracker.record_mc_online()
+
                         server_status_cache.is_starting = False
                         server_status_cache.is_online = True
                         server_status_cache.is_stopping = False
@@ -94,10 +106,30 @@ async def monitor_minecraft_server():
                                 server_status_cache.player_count = status.players.online
                                 server_status_cache.max_players = status.players.max
                                 ping_fail_count = 0
+
+                                # 플레이어 입장/퇴장 감지
+                                current_players = set()
+                                if status.players.sample:
+                                    for sp in status.players.sample:
+                                        if sp.name:
+                                            current_players.add(sp.name)
+
+                                joined = current_players - known_online_players
+                                left = known_online_players - current_players
+
+                                for p in joined:
+                                    stats_tracker.record_player_join(p, server_status_cache.player_count)
+                                for p in left:
+                                    stats_tracker.record_player_leave(p, server_status_cache.player_count)
+
+                                known_online_players = current_players
                             except Exception:
                                 ping_fail_count += 1
                                 if ping_fail_count > 3:
                                     server_status_cache.player_count = 0
+                                    for p in known_online_players:
+                                        stats_tracker.record_player_leave(p, 0)
+                                    known_online_players.clear()
 
                         # 3. 빈 서버 자동 종료 카운터: 매 1초마다 정확히 1초씩 누적
                         if server_status_cache.player_count == 0:

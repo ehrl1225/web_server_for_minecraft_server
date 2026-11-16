@@ -1,6 +1,7 @@
 import subprocess
 import os
 import threading
+from .stats_tracker import stats_tracker
 
 log_path = "src/log/console_output.log"
 server_file_path_txt = "src/server_file_path.txt"
@@ -57,6 +58,7 @@ class ServerData:
         self.server_process = None
         self.is_stopping = False
         self._close_log_file()
+        stats_tracker.record_mc_stop()
         return False
 
     def is_started(self) -> dict[str, bool]:
@@ -100,6 +102,7 @@ class ServerData:
                 text=True,
                 cwd=os.path.dirname(path)
             )
+            stats_tracker.record_mc_start()
             return {"message": "Server started"}
         return {"message": "Server is already running"}
 
@@ -134,6 +137,7 @@ class ServerData:
                         self.server_process = None
                         self.is_stopping = False
                         self._close_log_file()
+                        stats_tracker.record_mc_stop()
                         print("[System] 마인크래프트 서버가 완전히 안전하게 종료되었습니다.")
 
                 shutdown_thread = threading.Thread(

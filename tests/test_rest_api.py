@@ -41,3 +41,13 @@ def test_rest_api_console_output():
         res = client.post("/get-console-output", json={"startline": 0})
         assert res.status_code == 200
         assert "console_output" in res.json()
+
+
+def test_rest_api_statistics():
+    with TestClient(app) as client:
+        res = client.get("/statistics")
+        assert res.status_code == 200
+        data = res.json()
+        assert "stats" in data
+        assert "recent_events" in data
+        assert "peak_players" in data["stats"]

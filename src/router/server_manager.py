@@ -2,7 +2,7 @@ from fastapi import APIRouter
 import subprocess
 
 from src.models import Command, ReadLine
-from src.util import ServerData, server_status_cache
+from src.util import ServerData, server_status_cache, stats_tracker
 
 server_process: None | subprocess.Popen = None
 
@@ -55,3 +55,9 @@ async def get_console_output(readline: ReadLine):
 async def communicate(command: Command):
     global server_data
     return server_data.send_command(command.command)
+
+
+@router.get("/statistics")
+async def get_statistics():
+    """서버 수명주기 및 플레이어 통계, 최근 이벤트 히스토리 반환"""
+    return stats_tracker.get_summary()
