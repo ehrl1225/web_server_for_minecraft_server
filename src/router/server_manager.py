@@ -60,4 +60,6 @@ async def communicate(command: Command):
 @router.get("/statistics")
 async def get_statistics():
     """서버 수명주기 및 플레이어 통계, 최근 이벤트 히스토리 반환"""
-    return stats_tracker.get_summary()
+    data = stats_tracker.get_summary()
+    data["query_enabled"] = server_status_cache.query_enabled
+    return data

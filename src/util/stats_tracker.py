@@ -108,6 +108,9 @@ class StatsTracker:
 
     # 3. 플레이어 이벤트
     def record_player_join(self, player_name: str, current_count: int):
+        if not player_name:
+            return
+        player_name = player_name.strip()
         if player_name not in self.stats["unique_players"]:
             self.stats["unique_players"].append(player_name)
         counts = self.stats["player_session_counts"].get(player_name, 0)
@@ -120,6 +123,9 @@ class StatsTracker:
         self.log_event("PLAYER", f"플레이어 접속: {player_name} (현재 {current_count}명)")
 
     def record_player_leave(self, player_name: str, current_count: int):
+        if not player_name:
+            return
+        player_name = player_name.strip()
         self.log_event("PLAYER", f"플레이어 퇴장: {player_name} (현재 {current_count}명)")
 
     def get_recent_events(self, count: int = 25) -> list[str]:

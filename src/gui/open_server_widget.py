@@ -114,6 +114,17 @@ class OpenServerWidget(QWidget):
         tab2_widget = QWidget()
         tab2_layout = QVBoxLayout()
 
+        # Query 비활성화 경고 배너
+        self.query_warning_lb = QLabel(
+            "⚠️ 마인크래프트 server.properties에 'enable-query=true' 설정이 되어있지 않아 플레이어 통계를 수집할 수 없습니다.\n"
+            "   (정확한 접속자 통계를 이용하려면 server.properties 파일에서 enable-query=true로 변경 후 서버를 재시작하세요)"
+        )
+        self.query_warning_lb.setStyleSheet(
+            "background-color: #7F1D1D; color: #FCA5A5; padding: 10px; border-radius: 8px; font-weight: bold; font-size: 11px;"
+        )
+        self.query_warning_lb.setVisible(False)
+        tab2_layout.addWidget(self.query_warning_lb)
+
         # 통계 요약 그룹박스
         summary_group = QGroupBox("누적 및 세션 요약 통계")
         grid = QGridLayout()
@@ -311,6 +322,13 @@ class OpenServerWidget(QWidget):
                 stat_res = requests.get(f"{base_url}/statistics", timeout=1).json()
                 stats = stat_res.get("stats", {})
                 events = stat_res.get("recent_events", [])
+                query_enabled = stat_res.get("query_enabled", True)
+
+                # Query 비활성화 여부 경고 표시 (서버가 켜져 있을 때 query가 꺼져있으면 표시)
+                if is_started and not query_enabled:
+                    self.query_warning_lb.setVisible(True)
+                else:
+                    self.query_warning_lb.setVisible(False)
 
                 # 웹서버 통계 라벨
                 web_start = stats.get("web_start_time") or "-"
@@ -325,11 +343,15 @@ class OpenServerWidget(QWidget):
                 self.stat_mc_uptime_lb.setText(f"MC 서버 누적 가동: {mc_uptime}분")
 
                 # 플레이어 통계 라벨
-                peak = stats.get("peak_players", 0)
-                unique = stats.get("unique_players", [])
-                unique_str = ", ".join(unique) if unique else "없음"
-                self.stat_peak_players_lb.setText(f"최대 동시 접속자(Peak): {peak}명")
-                self.stat_unique_players_lb.setText(f"고유 플레이어: {len(unique)}명 ({unique_str})")
+                if is_started and not query_enabled:
+                    self.stat_peak_players_lb.setText("최대 동시 접속자(Peak): [Query 비활성화로 통계 중단]")
+                    self.stat_unique_players_lb.setText("고유 플레이어: [server.properties enable-query=true 필요]")
+                else:
+                    peak = stats.get("peak_players", 0)
+                    unique = stats.get("unique_players", [])
+                    unique_str = ", ".join(unique) if unique else "없음"
+                    self.stat_peak_players_lb.setText(f"최대 동시 접속자(Peak): {peak}명")
+                    self.stat_unique_players_lb.setText(f"고유 플레이어: {len(unique)}명 ({unique_str})")
 
                 # 최근 이벤트 텍스트 갱신
                 if events:

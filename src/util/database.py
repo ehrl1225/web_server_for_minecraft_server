@@ -9,21 +9,46 @@ from .stats_tracker import stats_tracker
 server_status_cache: ServerStatus = ServerStatus()
 
 
-def _get_server_port_from_properties(server_file_path: str | None) -> int:
-    """마인크래프트 서버 폴더의 server.properties에서 server-port를 추출 (기본 25565)"""
+def _get_server_properties(server_file_path: str | None) -> dict:
+    """마인크래프트 서버 폴더의 server.properties 파싱"""
+    result = {
+        "server-port": 25565,
+        "enable-query": False,
+        "query.port": 25565
+    }
     if not server_file_path:
-        return 25565
+        return result
     server_dir = os.path.dirname(server_file_path)
     props_path = os.path.join(server_dir, "server.properties")
     if os.path.exists(props_path):
         try:
             with open(props_path, "r", encoding="utf-8", errors="replace") as f:
                 for line in f:
-                    if line.strip().startswith("server-port="):
-                        return int(line.strip().split("=")[1])
+                    line = line.strip()
+                    if line.startswith("#") or "=" not in line:
+                        continue
+                    k, v = line.split("=", 1)
+                    k, v = k.strip(), v.strip()
+                    if k == "server-port":
+                        try:
+                            result["server-port"] = int(v)
+                        except ValueError:
+                            pass
+                    elif k == "enable-query":
+                        result["enable-query"] = (v.lower() == "true")
+                    elif k == "query.port":
+                        try:
+                            result["query.port"] = int(v)
+                        except ValueError:
+                            pass
         except Exception:
             pass
-    return 25565
+    return result
+
+
+def _get_server_port_from_properties(server_file_path: str | None) -> int:
+    """마인크래프트 서버 폴더의 server.properties에서 server-port를 추출 (기본 25565)"""
+    return _get_server_properties(server_file_path)["server-port"]
 
 
 def _calc_process_ram_gb(proc) -> float:
@@ -99,7 +124,12 @@ async def monitor_minecraft_server():
 
                         # 2. 2초마다 mcstatus로 실시간 핑 및 접속자 수 조회
                         if tick_count % 2 == 0:
-                            port = _get_server_port_from_properties(server_data.server_file_path)
+                            props = _get_server_properties(server_data.server_file_path)
+                            port = props["server-port"]
+                            query_enabled = props["enable-query"]
+                            query_port = props.get("query.port", port)
+                            server_status_cache.query_enabled = query_enabled
+
                             try:
                                 server = await JavaServer.async_lookup(f"127.0.0.1:{port}", timeout=1.8)
                                 status = await server.async_status()
@@ -107,22 +137,34 @@ async def monitor_minecraft_server():
                                 server_status_cache.max_players = status.players.max
                                 ping_fail_count = 0
 
-                                # 플레이어 입장/퇴장 감지
-                                current_players = set()
-                                if status.players.sample:
-                                    for sp in status.players.sample:
-                                        if sp.name:
-                                            current_players.add(sp.name)
+                                # 쿼리 기능(enable-query=true)이 켜진 경우에만 정확한 전체 플레이어 목록 추적
+                                if query_enabled:
+                                    try:
+                                        # query_port로 쿼리 요청
+                                        query_server = JavaServer("127.0.0.1", port=port, query_port=query_port)
+                                        query_res = await query_server.async_query(tries=1)
+                                        current_players = set()
+                                        if query_res.players and query_res.players.list:
+                                            for name in query_res.players.list:
+                                                if name and name.strip():
+                                                    current_players.add(name.strip())
 
-                                joined = current_players - known_online_players
-                                left = known_online_players - current_players
+                                        joined = current_players - known_online_players
+                                        left = known_online_players - current_players
 
-                                for p in joined:
-                                    stats_tracker.record_player_join(p, server_status_cache.player_count)
-                                for p in left:
-                                    stats_tracker.record_player_leave(p, server_status_cache.player_count)
+                                        for p in joined:
+                                            stats_tracker.record_player_join(p, server_status_cache.player_count)
+                                        for p in left:
+                                            stats_tracker.record_player_leave(p, server_status_cache.player_count)
 
-                                known_online_players = current_players
+                                        known_online_players = current_players
+                                    except Exception:
+                                        # 쿼리 패킷 일시적 유실 시 기존 목록 유지
+                                        pass
+                                else:
+                                    # enable-query가 꺼진 경우 추적하지 않고 목록 초기화
+                                    known_online_players.clear()
+
                             except Exception:
                                 ping_fail_count += 1
                                 if ping_fail_count > 3:
