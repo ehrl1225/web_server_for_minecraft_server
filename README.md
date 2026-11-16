@@ -88,19 +88,33 @@ web_server_for_minecraft_server/
 
 ## 🚀 실행 및 테스트 방법
 
-### 테스트 실행
+### 1. 일반 사용자 (무설치 EXE 실행)
+- GitHub 저장소의 **Releases** 페이지에서 `MinecraftServerController.exe`를 다운로드합니다.
+- Python이나 uv 설치 없이 바로 실행하여 사용할 수 있습니다.
+
+### 2. 개발자 환경 실행 및 테스트
+
+#### 테스트 실행
 ```bash
 uv run pytest
 ```
 
-### 호스트 GUI 실행
+#### 호스트 GUI 개발 실행
 ```bash
 uv run python main.py
 # 또는
 run.bat
 ```
+
+#### 로컬 단일 EXE 빌드
+```bash
+uv run pyinstaller --noconfirm --onefile --console --name "MinecraftServerController" --add-data "src/templates;src/templates" --collect-all uvicorn --collect-all fastapi --collect-all starlette main.py
+```
+
+### 3. 사용 가이드
 1. 호스트 GUI 창에서 마인크래프트 서버 실행 파일(`.bat`) 경로를 지정합니다.
 2. 원하는 빈 서버 자동 종료 시간(예: 10분)을 설정합니다.
 3. **웹서버 시작** 버튼을 누릅니다.
 4. 관리자 창에서 실시간 콘솔 로그, RAM 사용량, 접속자 수를 모니터링하고 명령어를 보낼 수 있습니다.
 5. 친구들에게 `http://<호스트IP>:9000/server/index.html` 주소를 공유하면 친구들이 브라우저에서 서버를 켜거나 빈 서버를 끌 수 있습니다.
+

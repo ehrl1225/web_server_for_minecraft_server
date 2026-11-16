@@ -1,8 +1,11 @@
 .idea
 .venv
 build
+dist
+*.spec
 servers
 src/log
 **/__pycache__
 src/server_file_path.txt
 minecraft_api_server.egg-info
+server_config.json
