@@ -34,6 +34,8 @@ class OpenServerWidget(QWidget):
         self.port_sp = QSpinBox()
         self.start_btn = QPushButton("웹서버 시작")
         self.stop_btn = QPushButton("웹서버 종료")
+        self.mc_start_btn = QPushButton("MC서버 시작")
+        self.mc_stop_btn = QPushButton("MC서버 종료")
 
         url_hbox = QHBoxLayout()
         url_hbox.addWidget(self.url_lb)
@@ -45,6 +47,11 @@ class OpenServerWidget(QWidget):
         server_btn_hbox.addWidget(self.port_sp)
         server_btn_hbox.addWidget(self.start_btn)
         server_btn_hbox.addWidget(self.stop_btn)
+
+        mc_server_btn_hbox = QHBoxLayout()
+        mc_server_btn_hbox.addStretch(2)
+        mc_server_btn_hbox.addWidget(self.mc_start_btn, 1)
+        mc_server_btn_hbox.addWidget(self.mc_stop_btn, 1)
 
         # 2. 마인크래프트 실시간 상태 모니터링 (상태, 접속자, RAM 사용량, 자동종료)
         status_group = QGroupBox("마인크래프트 실시간 상태")
@@ -170,6 +177,7 @@ class OpenServerWidget(QWidget):
         vbox = QVBoxLayout()
         vbox.addLayout(url_hbox)
         vbox.addLayout(server_btn_hbox)
+        vbox.addLayout(mc_server_btn_hbox)
         vbox.addWidget(self.tabs, stretch=1)
 
         self.setLayout(vbox)
@@ -197,6 +205,10 @@ class OpenServerWidget(QWidget):
 
         self.start_btn.pressed.connect(self.startServer)
         self.stop_btn.pressed.connect(self.stopServer)
+        self.mc_start_btn.pressed.connect(self.startMinecraftServer)
+        self.mc_stop_btn.pressed.connect(self.stopMinecraftServer)
+        self.mc_start_btn.setEnabled(False)
+        self.mc_stop_btn.setEnabled(False)
         self.command_le.returnPressed.connect(self.sendCommand)
         self.command_btn.pressed.connect(self.sendCommand)
         self.stop_btn.setEnabled(False)
@@ -247,12 +259,38 @@ class OpenServerWidget(QWidget):
         self.url_btn.setEnabled(True)
         self.start_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
+        self.mc_start_btn.setEnabled(False)
+        self.mc_stop_btn.setEnabled(False)
         self.server_started = False
         self.mc_was_started = False
         self.mc_status_lb.setText("상태: 오프라인 (웹서버 정지됨)")
         self.mc_players_lb.setText("접속자: 0 명")
         self.mc_ram_lb.setText("RAM 사용량: 0.0 GB")
         self.mc_autostop_lb.setText("빈 서버 자동 종료: 비활성")
+
+    def startMinecraftServer(self) -> None:
+        if not self.server_started:
+            QMessageBox.warning(self, "경고", "먼저 웹서버를 시작해야 합니다.")
+            return
+        port = self.port_sp.value()
+        try:
+            res = requests.post(f"http://127.0.0.1:{port}/start-server", timeout=3).json()
+            if res.get("status") is False:
+                QMessageBox.warning(self, "안내", res.get("message", "서버를 시작할 수 없습니다."))
+        except Exception as e:
+            QMessageBox.critical(self, "오류", f"마인크래프트 서버 시작 요청 실패: {e}")
+
+    def stopMinecraftServer(self) -> None:
+        if not self.server_started:
+            QMessageBox.warning(self, "경고", "먼저 웹서버를 시작해야 합니다.")
+            return
+        port = self.port_sp.value()
+        try:
+            res = requests.post(f"http://127.0.0.1:{port}/stop-server", timeout=3).json()
+            if res.get("status") is False:
+                QMessageBox.warning(self, "안내", res.get("message", "서버를 종료할 수 없습니다."))
+        except Exception as e:
+            QMessageBox.critical(self, "오류", f"마인크래프트 서버 종료 요청 실패: {e}")
 
     def pollServerStatus(self) -> None:
         """FastAPI 백엔드로 주기적으로 마인크래프트 실시간 상태 및 로그 질의"""
@@ -274,6 +312,17 @@ class OpenServerWidget(QWidget):
             # 라벨 텍스트 업데이트
             self.mc_players_lb.setText(f"접속자: {player_count} / {max_players} 명")
             self.mc_ram_lb.setText(f"RAM 사용량: {ram_gb} GB")
+
+            # 마인크래프트 서버 시작/종료 버튼 활성화 제어
+            if is_stopping:
+                self.mc_start_btn.setEnabled(False)
+                self.mc_stop_btn.setEnabled(False)
+            elif is_started:
+                self.mc_start_btn.setEnabled(False)
+                self.mc_stop_btn.setEnabled(True)
+            else:
+                self.mc_start_btn.setEnabled(True)
+                self.mc_stop_btn.setEnabled(False)
 
             if is_stopping:
                 self.mc_status_lb.setText("상태: 월드 저장 및 안전 종료 중...")

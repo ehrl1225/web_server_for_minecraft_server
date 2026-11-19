@@ -153,6 +153,32 @@ class ServerData:
                 return {"error": str(e)}
         return {"message": "Server is not running"}
 
+    def kill(self) -> dict[str, str]:
+        """부팅 실패, 무한 루프, 먹통 등 정상 stop 명령이 듣지 않을 때 프로세스를 강제 즉시 종료"""
+        if self.__is_started():
+            try:
+                proc = self.server_process
+                if proc is not None:
+                    # Windows 환경에서 cmd shell 및 하위 java 프로세스 트리 전체 강제 종료
+                    if os.name == "nt":
+                        subprocess.run(
+                            ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            check=False
+                        )
+                    else:
+                        proc.kill()
+                self.server_process = None
+                self.is_stopping = False
+                self._close_log_file()
+                stats_tracker.record_mc_stop()
+                print("[System] 마인크래프트 서버가 강제 종료(Kill)되었습니다.")
+                return {"message": "Server killed forcibly"}
+            except Exception as e:
+                return {"error": str(e)}
+        return {"message": "Server is not running"}
+
     def get_console_output(self, startline: int) -> dict[str, list[str] | str]:
         try:
             if not os.path.exists(log_path):
