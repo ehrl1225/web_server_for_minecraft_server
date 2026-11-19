@@ -51,3 +51,24 @@ def test_rest_api_statistics():
         assert "stats" in data
         assert "recent_events" in data
         assert "peak_players" in data["stats"]
+
+
+def test_rest_api_stop_server_remote_blocked_when_players_online(monkeypatch):
+    from src.util import server_status_cache
+    # 1. 원격 클라이언트 (외부 IP: 192.168.0.50 등) 요청 시 차단
+    with TestClient(app, client=("192.168.0.50", 50000)) as client:
+        monkeypatch.setattr(server_status_cache, "player_count", 3)
+        res = client.post("/stop-server")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["status"] is False
+        assert "플레이 중이므로" in data["message"]
+
+    # 2. 로컬호스트 (호스트 GUI 등 127.0.0.1) 요청 시에는 차단되지 않고 정상 진행
+    with TestClient(app, client=("127.0.0.1", 50000)) as client:
+        monkeypatch.setattr(server_status_cache, "player_count", 3)
+        res = client.post("/stop-server")
+        assert res.status_code == 200
+        data = res.json()
+        # 서버가 꺼져 있을 때는 stop()의 기본 반환 ("Server is not running")
+        assert data.get("message") == "Server is not running"

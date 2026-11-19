@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 import subprocess
 
 from src.models import Command, ReadLine
@@ -40,8 +40,19 @@ async def start_server():
 
 
 @router.post("/stop-server")
-async def stop_server():
+async def stop_server(request: Request):
     global server_data
+    # 요청 IP 확인: 로컬(GUI 호스트 관리자)인지 확인
+    client_host = request.client.host if request.client else ""
+    is_localhost = client_host in ("127.0.0.1", "localhost", "::1", "testclient")
+
+    # 외부(웹 등)에서 요청했고 플레이어가 1명 이상 접속해 있는 경우 종료 차단
+    if not is_localhost and server_status_cache.player_count > 0:
+        return {
+            "status": False,
+            "message": f"현재 {server_status_cache.player_count}명이 플레이 중이므로 서버를 종료할 수 없습니다."
+        }
+
     return server_data.stop()
 
 
