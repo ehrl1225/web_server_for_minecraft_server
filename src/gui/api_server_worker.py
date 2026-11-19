@@ -1,5 +1,6 @@
 from PyQt6.QtCore import QObject, pyqtSignal
 from src.router import server_data
+from src.util import stats_tracker
 import subprocess
 import os
 import sys
@@ -33,6 +34,13 @@ class ApiServerWorker(QObject):
         self.server_started.emit()
 
     def stop(self):
+        # 1. 종료 전 웹서버 종료 이벤트 기록 및 누적 가동 시간 안전하게 저장
+        try:
+            stats_tracker.record_web_stop()
+        except Exception as e:
+            print(f"[ApiServerWorker] 통계 기록 실패: {e}")
+
+        # 2. 서브프로세스 종료
         if self.process is not None:
             try:
                 subprocess.run(

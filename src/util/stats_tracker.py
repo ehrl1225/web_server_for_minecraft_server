@@ -35,6 +35,8 @@ class StatsTracker:
                 pass
 
     def save_stats(self):
+        if "PYTEST_CURRENT_TEST" in os.environ:
+            return
         try:
             with open(STATS_PATH, "w", encoding="utf-8") as f:
                 json.dump(self.stats, f, ensure_ascii=False, indent=2)
@@ -42,6 +44,8 @@ class StatsTracker:
             pass
 
     def log_event(self, category: str, message: str):
+        if "PYTEST_CURRENT_TEST" in os.environ:
+            return
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log_line = f"[{now_str}] [{category}] {message}\n"
         try:
@@ -74,6 +78,7 @@ class StatsTracker:
                 self.log_event("WEB", "웹서버 종료됨")
         else:
             self.log_event("WEB", "웹서버 종료됨")
+        self.stats["web_start_time"] = None
         self.save_stats()
 
     # 2. 마인크래프트 서버 이벤트
@@ -104,6 +109,7 @@ class StatsTracker:
                 self.log_event("MC", "마인크래프트 서버 종료됨")
         else:
             self.log_event("MC", "마인크래프트 서버 종료됨")
+        self.stats["mc_start_time"] = None
         self.save_stats()
 
     # 3. 플레이어 이벤트
@@ -128,6 +134,36 @@ class StatsTracker:
         player_name = player_name.strip()
         self.log_event("PLAYER", f"플레이어 퇴장: {player_name} (현재 {current_count}명)")
 
+    def sync_periodic_uptime(self, is_mc_running: bool = False):
+        """서버가 예기치 않게 종료되거나 강제 종료(taskkill)되더라도 누적 가동 시간을 잃지 않도록 30초마다 파일에 동기화"""
+        now = datetime.now()
+        updated = False
+
+        if self.stats.get("web_start_time"):
+            try:
+                start_dt = datetime.strptime(self.stats["web_start_time"], "%Y-%m-%d %H:%M:%S")
+                duration = int((now - start_dt).total_seconds())
+                if duration > 0:
+                    self.stats["web_uptime_seconds"] += duration
+                    self.stats["web_start_time"] = now.strftime("%Y-%m-%d %H:%M:%S")
+                    updated = True
+            except Exception:
+                pass
+
+        if is_mc_running and self.stats.get("mc_start_time"):
+            try:
+                start_dt = datetime.strptime(self.stats["mc_start_time"], "%Y-%m-%d %H:%M:%S")
+                duration = int((now - start_dt).total_seconds())
+                if duration > 0:
+                    self.stats["mc_total_uptime_seconds"] += duration
+                    self.stats["mc_start_time"] = now.strftime("%Y-%m-%d %H:%M:%S")
+                    updated = True
+            except Exception:
+                pass
+
+        if updated:
+            self.save_stats()
+
     def get_recent_events(self, count: int = 25) -> list[str]:
         if not os.path.exists(EVENT_LOG_PATH):
             return []
@@ -140,8 +176,29 @@ class StatsTracker:
 
     def get_summary(self) -> dict:
         self.load_stats()
+        stats_copy = dict(self.stats)
+        now = datetime.now()
+
+        # 1. 웹서버가 현재 실행 중인 경우, 이번 세션의 가동 시간을 실시간으로 합산
+        if self.stats.get("web_start_time"):
+            try:
+                start_dt = datetime.strptime(self.stats["web_start_time"], "%Y-%m-%d %H:%M:%S")
+                current_session = int((now - start_dt).total_seconds())
+                stats_copy["web_uptime_seconds"] = self.stats["web_uptime_seconds"] + max(0, current_session)
+            except Exception:
+                pass
+
+        # 2. MC 서버가 현재 실행 중인 경우, 이번 세션의 가동 시간을 실시간으로 합산
+        if self.stats.get("mc_start_time"):
+            try:
+                start_dt = datetime.strptime(self.stats["mc_start_time"], "%Y-%m-%d %H:%M:%S")
+                current_session = int((now - start_dt).total_seconds())
+                stats_copy["mc_total_uptime_seconds"] = self.stats["mc_total_uptime_seconds"] + max(0, current_session)
+            except Exception:
+                pass
+
         return {
-            "stats": self.stats,
+            "stats": stats_copy,
             "recent_events": self.get_recent_events(25)
         }
 
