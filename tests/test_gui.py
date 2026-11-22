@@ -14,3 +14,5 @@ def test_gui_widget_initialization(monkeypatch):
     assert widget.server_started is False
     assert widget.stop_btn.isEnabled() is False
     assert widget.start_btn.isEnabled() is True
+    assert widget.mc_start_btn.isEnabled() is False
+    assert widget.mc_stop_btn.isEnabled() is False

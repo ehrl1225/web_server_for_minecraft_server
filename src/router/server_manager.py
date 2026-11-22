@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 import subprocess
 
 from src.models import Command, ReadLine
@@ -9,6 +9,15 @@ server_process: None | subprocess.Popen = None
 router = APIRouter()
 
 server_data = ServerData()
+
+
+LOCAL_HOSTS = {"127.0.0.1", "localhost", "::1", "testclient"}
+
+
+def is_local_request(request: Request) -> bool:
+    """클라이언트 IP가 로컬(호스트 관리자)인지 확인"""
+    client_host = request.client.host if request.client else ""
+    return client_host in LOCAL_HOSTS
 
 
 @router.get("/status")
@@ -40,26 +49,52 @@ async def start_server():
 
 
 @router.post("/stop-server")
-async def stop_server():
+async def stop_server(request: Request):
     global server_data
+    # 요청 IP 확인: 로컬(GUI 호스트 관리자)인지 확인
+    is_localhost = is_local_request(request)
+
+    # 외부(웹 등)에서 요청했고 플레이어가 1명 이상 접속해 있는 경우 종료 차단
+    if not is_localhost and server_status_cache.player_count > 0:
+        return {
+            "status": False,
+            "message": f"현재 {server_status_cache.player_count}명이 플레이 중이므로 서버를 종료할 수 없습니다."
+        }
+
     return server_data.stop()
 
 
 @router.post("/get-console-output")
-async def get_console_output(readline: ReadLine):
+async def get_console_output(readline: ReadLine, request: Request):
+    if not is_local_request(request):
+        return {
+            "status": False,
+            "message": "관리자(로컬) 전용 요청입니다.",
+            "console_output": []
+        }
     global server_data
     return server_data.get_console_output(readline.startline)
 
 
 @router.post("/send-command")
-async def communicate(command: Command):
+async def communicate(command: Command, request: Request):
+    if not is_local_request(request):
+        return {
+            "status": False,
+            "message": "관리자(로컬) 전용 요청입니다."
+        }
     global server_data
     return server_data.send_command(command.command)
 
 
 @router.get("/statistics")
-async def get_statistics():
-    """서버 수명주기 및 플레이어 통계, 최근 이벤트 히스토리 반환"""
+async def get_statistics(request: Request):
+    """서버 수명주기 및 플레이어 통계, 최근 이벤트 히스토리 반환 (로컬 전용)"""
+    if not is_local_request(request):
+        return {
+            "status": False,
+            "message": "관리자(로컬) 전용 요청입니다."
+        }
     data = stats_tracker.get_summary()
     data["query_enabled"] = server_status_cache.query_enabled
     return data

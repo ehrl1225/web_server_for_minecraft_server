@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 from src.router import server_data
 from src.util.config import load_config, save_config
+from src.util import stats_tracker
 from .api_server_worker import ApiServerWorker
 
 
@@ -34,6 +35,8 @@ class OpenServerWidget(QWidget):
         self.port_sp = QSpinBox()
         self.start_btn = QPushButton("웹서버 시작")
         self.stop_btn = QPushButton("웹서버 종료")
+        self.mc_start_btn = QPushButton("MC서버 시작")
+        self.mc_stop_btn = QPushButton("MC서버 종료")
 
         url_hbox = QHBoxLayout()
         url_hbox.addWidget(self.url_lb)
@@ -45,6 +48,11 @@ class OpenServerWidget(QWidget):
         server_btn_hbox.addWidget(self.port_sp)
         server_btn_hbox.addWidget(self.start_btn)
         server_btn_hbox.addWidget(self.stop_btn)
+
+        mc_server_btn_hbox = QHBoxLayout()
+        mc_server_btn_hbox.addStretch(2)
+        mc_server_btn_hbox.addWidget(self.mc_start_btn, 1)
+        mc_server_btn_hbox.addWidget(self.mc_stop_btn, 1)
 
         # 2. 마인크래프트 실시간 상태 모니터링 (상태, 접속자, RAM 사용량, 자동종료)
         status_group = QGroupBox("마인크래프트 실시간 상태")
@@ -170,6 +178,7 @@ class OpenServerWidget(QWidget):
         vbox = QVBoxLayout()
         vbox.addLayout(url_hbox)
         vbox.addLayout(server_btn_hbox)
+        vbox.addLayout(mc_server_btn_hbox)
         vbox.addWidget(self.tabs, stretch=1)
 
         self.setLayout(vbox)
@@ -197,6 +206,10 @@ class OpenServerWidget(QWidget):
 
         self.start_btn.pressed.connect(self.startServer)
         self.stop_btn.pressed.connect(self.stopServer)
+        self.mc_start_btn.pressed.connect(self.startMinecraftServer)
+        self.mc_stop_btn.pressed.connect(self.stopMinecraftServer)
+        self.mc_start_btn.setEnabled(False)
+        self.mc_stop_btn.setEnabled(False)
         self.command_le.returnPressed.connect(self.sendCommand)
         self.command_btn.pressed.connect(self.sendCommand)
         self.stop_btn.setEnabled(False)
@@ -247,12 +260,84 @@ class OpenServerWidget(QWidget):
         self.url_btn.setEnabled(True)
         self.start_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
+        self.mc_start_btn.setEnabled(False)
+        self.mc_stop_btn.setEnabled(False)
         self.server_started = False
         self.mc_was_started = False
         self.mc_status_lb.setText("상태: 오프라인 (웹서버 정지됨)")
         self.mc_players_lb.setText("접속자: 0 명")
         self.mc_ram_lb.setText("RAM 사용량: 0.0 GB")
         self.mc_autostop_lb.setText("빈 서버 자동 종료: 비활성")
+
+        # 웹서버 종료 직후 최신 통계 및 이벤트 히스토리 로컬 반영
+        self.updateStatisticsUI()
+
+    def updateStatisticsUI(self, stats: dict | None = None, events: list[str] | None = None, query_enabled: bool = True, is_started: bool = False) -> None:
+        """통계 라벨 및 최근 이벤트 히스토리 UI 갱신 (로컬 직접 읽기 또는 API 결과)"""
+        if stats is None or events is None:
+            data = stats_tracker.get_summary()
+            stats = data.get("stats", {})
+            events = data.get("recent_events", [])
+
+        # 웹서버 통계 라벨
+        web_start = stats.get("web_start_time") or "-"
+        web_sec = stats.get("web_uptime_seconds", 0)
+        web_m, web_s = divmod(web_sec, 60)
+        web_h, web_m = divmod(web_m, 60)
+        web_dur_str = f"{web_h}시간 {web_m}분" if web_h else f"{web_m}분 {web_s}초"
+        self.stat_web_start_lb.setText(f"웹서버 최근 시작: {web_start}")
+        self.stat_web_uptime_lb.setText(f"웹서버 누적 가동: {web_dur_str}")
+
+        # MC 서버 통계 라벨
+        mc_runs = stats.get("mc_run_count", 0)
+        mc_sec = stats.get("mc_total_uptime_seconds", 0)
+        mc_m, mc_s = divmod(mc_sec, 60)
+        mc_h, mc_m = divmod(mc_m, 60)
+        mc_dur_str = f"{mc_h}시간 {mc_m}분" if mc_h else f"{mc_m}분 {mc_s}초"
+        self.stat_mc_runs_lb.setText(f"MC 서버 실행 횟수: {mc_runs}회")
+        self.stat_mc_uptime_lb.setText(f"MC 서버 누적 가동: {mc_dur_str}")
+
+        # 플레이어 통계 라벨
+        if is_started and not query_enabled:
+            self.stat_peak_players_lb.setText("최대 동시 접속자(Peak): [Query 비활성화로 통계 중단]")
+            self.stat_unique_players_lb.setText("고유 플레이어: [server.properties enable-query=true 필요]")
+        else:
+            peak = stats.get("peak_players", 0)
+            unique = stats.get("unique_players", [])
+            unique_str = ", ".join(unique) if unique else "없음"
+            self.stat_peak_players_lb.setText(f"최대 동시 접속자(Peak): {peak}명")
+            self.stat_unique_players_lb.setText(f"고유 플레이어: {len(unique)}명 ({unique_str})")
+
+        # 최근 이벤트 텍스트 갱신
+        if events:
+            self.events_text_edit.setPlainText("\n".join(events))
+            events_cursor = self.events_text_edit.textCursor()
+            events_cursor.movePosition(QTextCursor.MoveOperation.End)
+            self.events_text_edit.setTextCursor(events_cursor)
+
+    def startMinecraftServer(self) -> None:
+        if not self.server_started:
+            QMessageBox.warning(self, "경고", "먼저 웹서버를 시작해야 합니다.")
+            return
+        port = self.port_sp.value()
+        try:
+            res = requests.post(f"http://127.0.0.1:{port}/start-server", timeout=3).json()
+            if res.get("status") is False:
+                QMessageBox.warning(self, "안내", res.get("message", "서버를 시작할 수 없습니다."))
+        except Exception as e:
+            QMessageBox.critical(self, "오류", f"마인크래프트 서버 시작 요청 실패: {e}")
+
+    def stopMinecraftServer(self) -> None:
+        if not self.server_started:
+            QMessageBox.warning(self, "경고", "먼저 웹서버를 시작해야 합니다.")
+            return
+        port = self.port_sp.value()
+        try:
+            res = requests.post(f"http://127.0.0.1:{port}/stop-server", timeout=3).json()
+            if res.get("status") is False:
+                QMessageBox.warning(self, "안내", res.get("message", "서버를 종료할 수 없습니다."))
+        except Exception as e:
+            QMessageBox.critical(self, "오류", f"마인크래프트 서버 종료 요청 실패: {e}")
 
     def pollServerStatus(self) -> None:
         """FastAPI 백엔드로 주기적으로 마인크래프트 실시간 상태 및 로그 질의"""
@@ -274,6 +359,17 @@ class OpenServerWidget(QWidget):
             # 라벨 텍스트 업데이트
             self.mc_players_lb.setText(f"접속자: {player_count} / {max_players} 명")
             self.mc_ram_lb.setText(f"RAM 사용량: {ram_gb} GB")
+
+            # 마인크래프트 서버 시작/종료 버튼 활성화 제어
+            if is_stopping:
+                self.mc_start_btn.setEnabled(False)
+                self.mc_stop_btn.setEnabled(False)
+            elif is_started:
+                self.mc_start_btn.setEnabled(False)
+                self.mc_stop_btn.setEnabled(True)
+            else:
+                self.mc_start_btn.setEnabled(True)
+                self.mc_stop_btn.setEnabled(False)
 
             if is_stopping:
                 self.mc_status_lb.setText("상태: 월드 저장 및 안전 종료 중...")
@@ -330,35 +426,7 @@ class OpenServerWidget(QWidget):
                 else:
                     self.query_warning_lb.setVisible(False)
 
-                # 웹서버 통계 라벨
-                web_start = stats.get("web_start_time") or "-"
-                web_uptime = stats.get("web_uptime_seconds", 0) // 60
-                self.stat_web_start_lb.setText(f"웹서버 최근 시작: {web_start}")
-                self.stat_web_uptime_lb.setText(f"웹서버 누적 가동: {web_uptime}분")
-
-                # MC 서버 통계 라벨
-                mc_runs = stats.get("mc_run_count", 0)
-                mc_uptime = stats.get("mc_total_uptime_seconds", 0) // 60
-                self.stat_mc_runs_lb.setText(f"MC 서버 실행 횟수: {mc_runs}회")
-                self.stat_mc_uptime_lb.setText(f"MC 서버 누적 가동: {mc_uptime}분")
-
-                # 플레이어 통계 라벨
-                if is_started and not query_enabled:
-                    self.stat_peak_players_lb.setText("최대 동시 접속자(Peak): [Query 비활성화로 통계 중단]")
-                    self.stat_unique_players_lb.setText("고유 플레이어: [server.properties enable-query=true 필요]")
-                else:
-                    peak = stats.get("peak_players", 0)
-                    unique = stats.get("unique_players", [])
-                    unique_str = ", ".join(unique) if unique else "없음"
-                    self.stat_peak_players_lb.setText(f"최대 동시 접속자(Peak): {peak}명")
-                    self.stat_unique_players_lb.setText(f"고유 플레이어: {len(unique)}명 ({unique_str})")
-
-                # 최근 이벤트 텍스트 갱신
-                if events:
-                    self.events_text_edit.setPlainText("\n".join(events))
-                    events_cursor = self.events_text_edit.textCursor()
-                    events_cursor.movePosition(QTextCursor.MoveOperation.End)
-                    self.events_text_edit.setTextCursor(events_cursor)
+                self.updateStatisticsUI(stats=stats, events=events, query_enabled=query_enabled, is_started=is_started)
             except Exception:
                 pass
 

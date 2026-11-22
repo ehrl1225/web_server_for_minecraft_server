@@ -199,6 +199,9 @@ async def monitor_minecraft_server():
                         server_status_cache.empty_seconds = 0
 
             tick_count += 1
+            if tick_count % 30 == 0:
+                stats_tracker.sync_periodic_uptime(is_mc_running=started)
+
             await asyncio.sleep(1)
         except asyncio.CancelledError:
             break

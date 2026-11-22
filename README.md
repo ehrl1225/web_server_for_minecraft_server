@@ -99,7 +99,8 @@ web_server_for_minecraft_server/
 | | 빈 서버 안전 종료 버튼 | ✅ 완료 | 접속자가 0명일 때만 사용자가 직접 종료할 수 있는 버튼 제공 |
 | **안정성/백엔드** | Graceful Shutdown (월드 저장) | ✅ 완료 | `stop\n` 전송 후 최대 90초간 자연 종료 대기 (강제 킬 방지) |
 | | Query 기반 정확한 플레이어 추적 | ✅ 완료 | 12명 제한이 있는 샘플 대신 Query 프로토콜로 전체 인원 입/퇴장 정확히 추적 |
-| | 테스트 자동화 | ✅ 완료 | `pytest` 12개 테스트 항목 100% 통과 |
+| | 관리자 전용 API 로컬 접근 제한 | ✅ 완료 | `/get-console-output`, `/send-command`, `/statistics` 및 `/stop-server`(플레이어 접속 시) 로컬(localhost) 전용 제한 |
+| | 테스트 자동화 | ✅ 완료 | `pytest` 13개 테스트 항목 100% 통과 |
 
 ---
 
